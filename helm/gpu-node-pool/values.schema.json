@@ -20,11 +20,85 @@
         },
         "cluster": {
             "type": "object",
+            "required": [
+                "name",
+                "organization",
+                "baseDomain",
+                "managementCluster"
+            ],
             "additionalProperties": true,
             "properties": {
+                "baseDomain": {
+                    "type": "string",
+                    "description": "Base domain of the installation (the cluster's `global.connectivity.baseDomain`)."
+                },
+                "cilium": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "ipamMode": {
+                            "type": "string",
+                            "description": "Cilium IPAM mode of the cluster; decides the unmanaged-devices network unit.",
+                            "enum": [
+                                "kubernetes",
+                                "eni"
+                            ]
+                        }
+                    }
+                },
+                "containerRegistry": {
+                    "type": "string",
+                    "description": "Registry containerd pulls the sandbox (pause) image from."
+                },
+                "kubelet": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "maxPods": {
+                            "type": "integer",
+                            "description": "Maximum pods per node as the cluster's kubelet patch sets it."
+                        }
+                    }
+                },
+                "managementCluster": {
+                    "type": "string",
+                    "description": "Name of the management cluster (the cluster's `global.managementCluster`)."
+                },
                 "name": {
                     "type": "string",
-                    "description": "Name of the existing Cluster API cluster the pool is created for."
+                    "description": "Name of the existing Cluster API cluster the pool joins.",
+                    "pattern": "^[a-z0-9][-a-z0-9]{0,18}[a-z0-9]$"
+                },
+                "organization": {
+                    "type": "string",
+                    "description": "Organization owning the cluster; the release lives in `org-<organization>`."
+                },
+                "proxy": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Route containerd, kubelet, teleport and the kubeadm commands through the cluster's HTTP proxy."
+                        },
+                        "httpProxy": {
+                            "type": "string",
+                            "description": "HTTP proxy URL."
+                        },
+                        "httpsProxy": {
+                            "type": "string",
+                            "description": "HTTPS proxy URL."
+                        },
+                        "noProxy": {
+                            "type": "string",
+                            "description": "Comma-separated no-proxy list as the cluster computes it."
+                        }
+                    }
+                },
+                "registryMirrors": {
+                    "type": "object",
+                    "description": "Registry mirrors as containerd `hosts.toml` files: registry host -> ordered list of endpoint hosts (a snapshot of the cluster's mirrors and local registry cache).",
+                    "additionalProperties": true
                 }
             }
         },
@@ -53,11 +127,83 @@
         },
         "pool": {
             "type": "object",
+            "required": [
+                "name",
+                "kubernetesVersion",
+                "machineImage"
+            ],
             "additionalProperties": false,
             "properties": {
+                "accelerator": {
+                    "type": "string",
+                    "description": "Accelerator from the curated list; picks the EC2 instance family.",
+                    "enum": [
+                        "nvidia-l4",
+                        "nvidia-a10g",
+                        "nvidia-t4",
+                        "nvidia-l40s"
+                    ]
+                },
+                "consolidateAfter": {
+                    "type": "string",
+                    "description": "Time an empty or underutilized node lives before Karpenter consolidates it."
+                },
+                "kubernetesVersion": {
+                    "type": "string",
+                    "description": "Kubernetes version the pool's nodes run (`1.33.1`), never newer than the control plane.",
+                    "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+                },
+                "machineImage": {
+                    "type": "string",
+                    "description": "Name of the Flatcar machine image (`flatcar-<channel>-<flatcar>-kube-<k8s>-tooling-<tooling>-gs`)."
+                },
+                "maxSize": {
+                    "type": "object",
+                    "description": "Upper bound of the pool, as Karpenter limits (resources across all of its nodes).",
+                    "additionalProperties": true,
+                    "properties": {
+                        "nvidia.com/gpu": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "minSize": {
+                    "type": "integer",
+                    "description": "Minimum size; Karpenter scales the pool to zero when nothing is scheduled.",
+                    "enum": [
+                        0
+                    ]
+                },
                 "name": {
                     "type": "string",
-                    "description": "Name of the node pool within the cluster."
+                    "description": "Name of the node pool within the cluster; five to twenty characters.",
+                    "pattern": "^[a-z0-9][-a-z0-9]{3,18}[a-z0-9]$"
+                },
+                "sizes": {
+                    "type": "array",
+                    "description": "Instance sizes Karpenter may pick within the accelerator's family, smallest first.",
+                    "items": {
+                        "type": "string"
+                    },
+                    "minItems": 1
+                },
+                "volumes": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "lib": {
+                            "type": "string",
+                            "description": "`/var/lib` volume (container images, kubelet)."
+                        },
+                        "log": {
+                            "type": "string",
+                            "description": "`/var/log` volume."
+                        },
+                        "root": {
+                            "type": "string",
+                            "description": "Root volume."
+                        }
+                    }
                 }
             }
         },
@@ -66,6 +212,16 @@
         },
         "subscriptionID": {
             "type": "string"
+        },
+        "teleport": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Join the nodes to Teleport with the cluster's `<cluster>-teleport-join-token` Secret; off where the cluster has none."
+                }
+            }
         }
     }
 }

@@ -1,0 +1,361 @@
+---
+# Source: gpu-node-pool/templates/karpentermachinepool.yaml
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: KarpenterMachinePool
+metadata:
+  name: test-wc-gpu00
+  namespace: org-giantswarm
+  labels:
+    app: "gpu-node-pool"
+    app.kubernetes.io/name: "gpu-node-pool"
+    app.kubernetes.io/instance: "test-wc-gpu00"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/version: "0.0.1"
+    application.giantswarm.io/team: "bumblebee"
+    helm.sh/chart: "gpu-node-pool-0.0.0-dev"
+    cluster.x-k8s.io/cluster-name: "test-wc"
+    cluster.x-k8s.io/watch-filter: capi
+    giantswarm.io/cluster: "test-wc"
+    giantswarm.io/machine-pool: "test-wc-gpu00"
+    giantswarm.io/organization: "giantswarm"
+spec:
+  ec2NodeClass:
+    amiSelectorTerms:
+    - name: flatcar-stable-4230.2.1-kube-1.33.1-tooling-1.27.0-gs
+      owner: "706635527432"
+    blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        deleteOnTermination: true
+        volumeSize: 15Gi
+        volumeType: gp3
+      rootVolume: true
+    - deviceName: /dev/xvdd
+      ebs:
+        deleteOnTermination: true
+        encrypted: true
+        volumeSize: 200Gi
+        volumeType: gp3
+    - deviceName: /dev/xvde
+      ebs:
+        deleteOnTermination: true
+        encrypted: true
+        volumeSize: 30Gi
+        volumeType: gp3
+    instanceProfile: test-wc-worker
+    metadataOptions:
+      httpPutResponseHopLimit: 3
+      httpTokens: required
+    securityGroupSelectorTerms:
+    - tags:
+        sigs.k8s.io/cluster-api-provider-aws/cluster/test-wc: owned
+        sigs.k8s.io/cluster-api-provider-aws/role: node
+    - tags:
+        sigs.k8s.io/cluster-api-provider-aws/cluster/test-wc: owned
+        sigs.k8s.io/cluster-api-provider-aws/role: lb
+    subnetSelectorTerms:
+    - tags:
+        giantswarm.io/role: nodes
+        sigs.k8s.io/cluster-api-provider-aws/cluster/test-wc: owned
+    tags:
+      Name: test-wc-gpu00
+  nodePool:
+    disruption:
+      consolidationPolicy: WhenEmptyOrUnderutilized
+      consolidateAfter: 10m
+    limits:
+      nvidia.com/gpu: "4"
+    template:
+      metadata:
+        labels:
+          giantswarm.io/machine-pool: test-wc-gpu00
+      spec:
+        requirements:
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values:
+          - g6e
+        - key: karpenter.k8s.aws/instance-size
+          operator: In
+          values:
+          - xlarge
+          - 2xlarge
+          - 4xlarge
+        - key: kubernetes.io/arch
+          operator: In
+          values:
+          - amd64
+        - key: kubernetes.io/os
+          operator: In
+          values:
+          - linux
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values:
+          - on-demand
+        startupTaints:
+        - effect: NoSchedule
+          key: node.cluster.x-k8s.io/uninitialized
+          value: "true"
+        - effect: NoSchedule
+          key: node.cilium.io/agent-not-ready
+          value: "true"
+        - effect: NoExecute
+          key: ebs.csi.aws.com/agent-not-ready
+          value: "true"
+        taints:
+        - effect: NoSchedule
+          key: nvidia.com/gpu
+        terminationGracePeriod: 30m
+
+---
+# Source: gpu-node-pool/templates/kubeadmconfig.yaml
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: KubeadmConfig
+metadata:
+  name: test-wc-gpu00-0ebd5
+  namespace: org-giantswarm
+  annotations:
+    machine-pool.giantswarm.io/name: test-wc-gpu00
+  labels:
+    app: "gpu-node-pool"
+    app.kubernetes.io/name: "gpu-node-pool"
+    app.kubernetes.io/instance: "test-wc-gpu00"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/version: "0.0.1"
+    application.giantswarm.io/team: "bumblebee"
+    helm.sh/chart: "gpu-node-pool-0.0.0-dev"
+    cluster.x-k8s.io/cluster-name: "test-wc"
+    cluster.x-k8s.io/watch-filter: capi
+    giantswarm.io/cluster: "test-wc"
+    giantswarm.io/machine-pool: "test-wc-gpu00"
+    giantswarm.io/organization: "giantswarm"
+spec:
+
+  files:
+  - path: /etc/sysctl.d/hardening.conf
+    permissions: "0644"
+    encoding: base64
+    content: ZnMuaW5vdGlmeS5tYXhfdXNlcl93YXRjaGVzID0gMTYzODQKZnMuaW5vdGlmeS5tYXhfdXNlcl9pbnN0YW5jZXMgPSA4MTkyCmtlcm5lbC5rcHRyX3Jlc3RyaWN0ID0gMgprZXJuZWwuc3lzcnEgPSAwCm5ldC5pcHY0LmNvbmYuYWxsLmxvZ19tYXJ0aWFucyA9IDEKbmV0LmlwdjQuY29uZi5hbGwuc2VuZF9yZWRpcmVjdHMgPSAwCm5ldC5pcHY0LmNvbmYuZGVmYXVsdC5hY2NlcHRfcmVkaXJlY3RzID0gMApuZXQuaXB2NC5jb25mLmRlZmF1bHQubG9nX21hcnRpYW5zID0gMQpuZXQuaXB2NC50Y3BfdGltZXN0YW1wcyA9IDAKbmV0LmlwdjYuY29uZi5hbGwuYWNjZXB0X3JlZGlyZWN0cyA9IDAKbmV0LmlwdjYuY29uZi5kZWZhdWx0LmFjY2VwdF9yZWRpcmVjdHMgPSAwCiMgSW5jcmVhc2VkIG1tYXBmcyBiZWNhdXNlIHNvbWUgYXBwbGljYXRpb25zLCBsaWtlIEVTLCBuZWVkIGhpZ2hlciBsaW1pdCB0byBzdG9yZSBkYXRhIHByb3Blcmx5CnZtLm1heF9tYXBfY291bnQgPSAyNjIxNDQKIyBSZXNlcnZlZCB0byBhdm9pZCBjb25mbGljdHMgd2l0aCBrdWJlLWFwaXNlcnZlciwgd2hpY2ggYWxsb2NhdGVzIHdpdGhpbiB0aGlzIHJhbmdlCm5ldC5pcHY0LmlwX2xvY2FsX3Jlc2VydmVkX3BvcnRzPTMwMDAwLTMyNzY3Cm5ldC5pcHY0LmNvbmYuYWxsLnJwX2ZpbHRlciA9IDEKbmV0LmlwdjQuY29uZi5hbGwuYXJwX2lnbm9yZSA9IDEKbmV0LmlwdjQuY29uZi5hbGwuYXJwX2Fubm91bmNlID0gMgoKIyBUaGVzZSBhcmUgcmVxdWlyZWQgZm9yIHRoZSBrdWJlbGV0ICctLXByb3RlY3Qta2VybmVsLWRlZmF1bHRzJyBmbGFnCiMgU2VlIGh0dHBzOi8vZ2l0aHViLmNvbS9naWFudHN3YXJtL2dpYW50c3dhcm0vaXNzdWVzLzEzNTg3CnZtLm92ZXJjb21taXRfbWVtb3J5PTEKa2VybmVsLnBhbmljPTEwCmtlcm5lbC5wYW5pY19vbl9vb3BzPTEK
+  - path: /etc/containerd/config.toml
+    permissions: "0644"
+    encoding: base64
+    content: dmVyc2lvbiA9IDIKCiMgcmVjb21tZW5kZWQgZGVmYXVsdHMgZnJvbSBodHRwczovL2dpdGh1Yi5jb20vY29udGFpbmVyZC9jb250YWluZXJkL2Jsb2IvbWFpbi9kb2NzL29wcy5tZCNiYXNlLWNvbmZpZ3VyYXRpb24KIyBzZXQgY29udGFpbmVyZCBhcyBhIHN1YnJlYXBlciBvbiBsaW51eCB3aGVuIGl0IGlzIG5vdCBydW5uaW5nIGFzIFBJRCAxCnN1YnJlYXBlciA9IHRydWUKIyBzZXQgY29udGFpbmVyZCBkZWJ1ZyBsZXZlbApbZGVidWddCiAgbGV2ZWwgPSAiaW5mbyIKCiMgc2V0IGNvbnRhaW5lcmQncyBPT00gc2NvcmUKb29tX3Njb3JlID0gLTk5OQpkaXNhYmxlZF9wbHVnaW5zID0gW10KW3BsdWdpbnMuImlvLmNvbnRhaW5lcmQucnVudGltZS52MS5saW51eCJdCiMgc2hpbSBiaW5hcnkgbmFtZS9wYXRoCnNoaW0gPSAiY29udGFpbmVyZC1zaGltIgojIHJ1bnRpbWUgYmluYXJ5IG5hbWUvcGF0aApydW50aW1lID0gInJ1bmMiCiMgZG8gbm90IHVzZSBhIHNoaW0gd2hlbiBzdGFydGluZyBjb250YWluZXJzLCBzYXZlcyBvbiBtZW1vcnkgYnV0CiMgbGl2ZSByZXN0b3JlIGlzIG5vdCBzdXBwb3J0ZWQKbm9fc2hpbSA9IGZhbHNlCgpbcGx1Z2lucy4iaW8uY29udGFpbmVyZC5ncnBjLnYxLmNyaSIuY29udGFpbmVyZC5ydW50aW1lcy5ydW5jXQojIHNldHRpbmcgcnVuYy5vcHRpb25zIHVuc2V0cyBwYXJlbnQgc2V0dGluZ3MKcnVudGltZV90eXBlID0gImlvLmNvbnRhaW5lcmQucnVuYy52MiIKW3BsdWdpbnMuImlvLmNvbnRhaW5lcmQuZ3JwYy52MS5jcmkiLmNvbnRhaW5lcmQucnVudGltZXMucnVuYy5vcHRpb25zXQpTeXN0ZW1kQ2dyb3VwID0gdHJ1ZQpbcGx1Z2lucy4iaW8uY29udGFpbmVyZC5ncnBjLnYxLmNyaSJdCnNhbmRib3hfaW1hZ2UgPSAiZ3NvY2kuYXp1cmVjci5pby9naWFudHN3YXJtL3BhdXNlOjMuMTAuMSIKZW5hYmxlX3NlbGludXggPSBmYWxzZQoKW3BsdWdpbnMuImlvLmNvbnRhaW5lcmQuZ3JwYy52MS5jcmkiLnJlZ2lzdHJ5XQogIGNvbmZpZ19wYXRoID0gIi9ldGMvY29udGFpbmVyZC9jZXJ0cy5kIgoKIyBhZGQgTnZpZGlhIGNvbnRhaW5lciBydW50aW1lIHRvIHN1cHBvcnQgR1BVcwpbcGx1Z2lucy4iaW8uY29udGFpbmVyZC5ncnBjLnYxLmNyaSIuY29udGFpbmVyZC5ydW50aW1lcy5udmlkaWFdCiAgcnVudGltZV90eXBlID0gImlvLmNvbnRhaW5lcmQucnVuYy52MiIKICBwcml2aWxlZ2VkX3dpdGhvdXRfaG9zdF9kZXZpY2VzID0gZmFsc2UKICBbcGx1Z2lucy4iaW8uY29udGFpbmVyZC5ncnBjLnYxLmNyaSIuY29udGFpbmVyZC5ydW50aW1lcy5udmlkaWEub3B0aW9uc10KICAgIEJpbmFyeU5hbWUgPSAiL3Vzci9iaW4vbnZpZGlhLWNvbnRhaW5lci1ydW50aW1lIgogICAgU3lzdGVtZENncm91cCA9IHRydWUK
+  - path: /etc/containerd/certs.d/gsoci.azurecr.io/hosts.toml
+    permissions: "0644"
+    encoding: base64
+    content: c2VydmVyID0gImh0dHBzOi8vZ3NvY2kuYXp1cmVjci5pbyIKW2hvc3QuImh0dHBzOi8vem90LnRlc3QuZXhhbXBsZS5jb20iXQogIGNhcGFiaWxpdGllcyA9IFsicHVsbCIsICJyZXNvbHZlIl0KW2hvc3QuImh0dHBzOi8vZ3NvY2kuYXp1cmVjci5pbyJdCiAgY2FwYWJpbGl0aWVzID0gWyJwdWxsIiwgInJlc29sdmUiXQo=
+  - path: /etc/selinux/config
+    permissions: "0644"
+    encoding: base64
+    content: IyBUaGlzIGZpbGUgY29udHJvbHMgdGhlIHN0YXRlIG9mIFNFTGludXggb24gdGhlIHN5c3RlbSBvbiBib290LgoKIyBTRUxJTlVYIGNhbiB0YWtlIG9uZSBvZiB0aGVzZSB0aHJlZSB2YWx1ZXM6CiMgICAgICAgZW5mb3JjaW5nIC0gU0VMaW51eCBzZWN1cml0eSBwb2xpY3kgaXMgZW5mb3JjZWQuCiMgICAgICAgcGVybWlzc2l2ZSAtIFNFTGludXggcHJpbnRzIHdhcm5pbmdzIGluc3RlYWQgb2YgZW5mb3JjaW5nLgojICAgICAgIGRpc2FibGVkIC0gTm8gU0VMaW51eCBwb2xpY3kgaXMgbG9hZGVkLgpTRUxJTlVYPXBlcm1pc3NpdmUKCiMgU0VMSU5VWFRZUEUgY2FuIHRha2Ugb25lIG9mIHRoZXNlIGZvdXIgdmFsdWVzOgojICAgICAgIHRhcmdldGVkIC0gT25seSB0YXJnZXRlZCBuZXR3b3JrIGRhZW1vbnMgYXJlIHByb3RlY3RlZC4KIyAgICAgICBzdHJpY3QgICAtIEZ1bGwgU0VMaW51eCBwcm90ZWN0aW9uLgojICAgICAgIG1scyAgICAgIC0gRnVsbCBTRUxpbnV4IHByb3RlY3Rpb24gd2l0aCBNdWx0aS1MZXZlbCBTZWN1cml0eQojICAgICAgIG1jcyAgICAgIC0gRnVsbCBTRUxpbnV4IHByb3RlY3Rpb24gd2l0aCBNdWx0aS1DYXRlZ29yeSBTZWN1cml0eQojICAgICAgICAgICAgICAgICAgKG1scywgYnV0IG9ubHkgb25lIHNlbnNpdGl2aXR5IGxldmVsKQpTRUxJTlVYVFlQRT1tY3MK
+  - path: /etc/selinux/flatcar-containerd-patch.cil
+    permissions: "0644"
+    encoding: base64
+    content: OyBGbGF0Y2FyIGNvbnRhaW5lcmQvcnVuYyBydW5zIGFzIGtlcm5lbF90IChiZWNhdXNlIG9mIHVubGFiZWxlZCAvdXNyKQo7IGtlcm5lbF90IGRvZXNuJ3QgaGF2ZSB0aGUgcmlnaHQgcGVybWlzc2lvbnMgZm9yIGEgY29udGFpbmVyIHJ1bnRpbWUsIGJ1dCBjb250YWluZXJfZW5naW5lX3QgZG9lcy4KOyBjb250YWluZXJfZW5naW5lX3QgYmVsb25ncyB0byBjb250YWluZXJfZW5naW5lX2RvbWFpbiBhbmQgY29udGFpbmVyX2VuZ2luZV9zeXN0ZW1fZG9tYWluLCB3aGljaCBwcm92aWRlIHRob3NlIHBlcm1pc3Npb25zCgo7IFRPRE86IFJlbW92ZSB3aGVuIGNvbnRhaW5lcmQvcnVuYyBkb2Vzbid0IHJ1biBhcyBrZXJuZWxfdAo7IEhBQ0s6IEFkZCBrZXJuZWxfdCB0byBjb250YWluZXJfZW5naW5lX2RvbWFpbiBhbmQgY29udGFpbmVyX2VuZ2luZV9zeXN0ZW1fZG9tYWluCih0eXBlYXR0cmlidXRlc2V0IGNvbnRhaW5lcl9lbmdpbmVfZG9tYWluIChrZXJuZWxfdCkpCih0eXBlYXR0cmlidXRlc2V0IGNvbnRhaW5lcl9lbmdpbmVfc3lzdGVtX2RvbWFpbiAoa2VybmVsX3QpKQo7IEhBQ0s6IEFsbG93IGNvbnRhaW5lcl9kb21haW4gdG8gYWNjZXNzIGtlcm5lbF90IGZvciBjb250YWluZXIgb3BlcmF0aW9ucyAoY29waWVkIGZyb20gY29udGFpbmVyX3QgcGVybXMpCihhbGxvdyBjb250YWluZXJfZG9tYWluIGtlcm5lbF90IChmZCAodXNlKSkpCihhbGxvdyBjb250YWluZXJfZG9tYWluIGtlcm5lbF90IChmaWZvX2ZpbGUgKGFwcGVuZCBnZXRhdHRyIGlvY3RsIG9wZW4gcmVhZCB3cml0ZSkpKQo=
+  - path: /etc/systemd/timesyncd.conf
+    permissions: "0644"
+    encoding: base64
+    content: W1RpbWVdCk5UUD0xNjkuMjU0LjE2OS4xMjMK
+  - path: /etc/kubernetes/patches/kubeletconfiguration.yaml
+    permissions: "0644"
+    encoding: base64
+    content: YXBpVmVyc2lvbjoga3ViZWxldC5jb25maWcuazhzLmlvL3YxYmV0YTEKa2luZDogS3ViZWxldENvbmZpZ3VyYXRpb24Kc2h1dGRvd25HcmFjZVBlcmlvZDogMzAwcwpzaHV0ZG93bkdyYWNlUGVyaW9kQ3JpdGljYWxQb2RzOiA2MHMKa2VybmVsTWVtY2dOb3RpZmljYXRpb246IHRydWUKZXZpY3Rpb25Tb2Z0OgogIG1lbW9yeS5hdmFpbGFibGU6ICI1MDBNaSIKZXZpY3Rpb25IYXJkOgogIG1lbW9yeS5hdmFpbGFibGU6ICIyMDBNaSIKICBpbWFnZWZzLmF2YWlsYWJsZTogIjE1JSIKZXZpY3Rpb25Tb2Z0R3JhY2VQZXJpb2Q6CiAgbWVtb3J5LmF2YWlsYWJsZTogIjVzIgpldmljdGlvbk1heFBvZEdyYWNlUGVyaW9kOiA2MApmZWF0dXJlR2F0ZXM6CiAgQ2x1c3RlclRydXN0QnVuZGxlOiB0cnVlCiAgQ2x1c3RlclRydXN0QnVuZGxlUHJvamVjdGlvbjogdHJ1ZQogIE11dGFibGVDU0lOb2RlQWxsb2NhdGFibGVDb3VudDogdHJ1ZQogIFBvZENlcnRpZmljYXRlUmVxdWVzdDogdHJ1ZQprdWJlUmVzZXJ2ZWQ6CiAgY3B1OiAzNTBtCiAgbWVtb3J5OiAxMjgwTWkKICBlcGhlbWVyYWwtc3RvcmFnZTogMTAyNE1pCmt1YmVSZXNlcnZlZENncm91cDogL2t1YmVyZXNlcnZlZC5zbGljZQpwcm90ZWN0S2VybmVsRGVmYXVsdHM6IHRydWUKc3lzdGVtUmVzZXJ2ZWQ6CiAgY3B1OiAyNTBtCiAgbWVtb3J5OiAzODRNaQpzeXN0ZW1SZXNlcnZlZENncm91cDogL3N5c3RlbS5zbGljZQp0bHNDaXBoZXJTdWl0ZXM6CiAgLSBUTFNfQUVTXzEyOF9HQ01fU0hBMjU2CiAgLSBUTFNfQUVTXzI1Nl9HQ01fU0hBMzg0CiAgLSBUTFNfQ0hBQ0hBMjBfUE9MWTEzMDVfU0hBMjU2CiAgLSBUTFNfRUNESEVfRUNEU0FfV0lUSF9BRVNfMTI4X0NCQ19TSEEKICAtIFRMU19FQ0RIRV9FQ0RTQV9XSVRIX0FFU18xMjhfR0NNX1NIQTI1NgogIC0gVExTX0VDREhFX0VDRFNBX1dJVEhfQUVTXzI1Nl9DQkNfU0hBCiAgLSBUTFNfRUNESEVfRUNEU0FfV0lUSF9BRVNfMjU2X0dDTV9TSEEzODQKICAtIFRMU19FQ0RIRV9FQ0RTQV9XSVRIX0NIQUNIQTIwX1BPTFkxMzA1X1NIQTI1NgogIC0gVExTX0VDREhFX1JTQV9XSVRIX0FFU18xMjhfQ0JDX1NIQQogIC0gVExTX0VDREhFX1JTQV9XSVRIX0FFU18xMjhfR0NNX1NIQTI1NgogIC0gVExTX0VDREhFX1JTQV9XSVRIX0FFU18yNTZfQ0JDX1NIQQogIC0gVExTX0VDREhFX1JTQV9XSVRIX0FFU18yNTZfR0NNX1NIQTM4NAogIC0gVExTX0VDREhFX1JTQV9XSVRIX0NIQUNIQTIwX1BPTFkxMzA1X1NIQTI1NgogIC0gVExTX1JTQV9XSVRIX0FFU18xMjhfQ0JDX1NIQQogIC0gVExTX1JTQV9XSVRIX0FFU18xMjhfR0NNX1NIQTI1NgogIC0gVExTX0VDREhFX0VDRFNBX1dJVEhfQ0hBQ0hBMjBfUE9MWTEzMDUKICAtIFRMU19FQ0RIRV9SU0FfV0lUSF9DSEFDSEEyMF9QT0xZMTMwNQpzZXJpYWxpemVJbWFnZVB1bGxzOiBmYWxzZQpzdHJlYW1pbmdDb25uZWN0aW9uSWRsZVRpbWVvdXQ6IDFoCmFsbG93ZWRVbnNhZmVTeXNjdGxzOgotICJuZXQuKiIK
+  - path: /etc/systemd/logind.conf.d/zzz-kubelet-graceful-shutdown.conf
+    permissions: "0700"
+    encoding: base64
+    content: W0xvZ2luXQojIGRlbGF5CkluaGliaXREZWxheU1heFNlYz0zMDAK
+  - path: /opt/bin/kubelet-aws-config.sh
+    permissions: "0755"
+    encoding: base64
+    content: IyEvdXNyL2Jpbi9lbnYgYmFzaApzZXQgLWV1byBwaXBlZmFpbAoKZXJyX3JlcG9ydCgpIHsKCWVjaG8gIkVSUk9SOiAkezB9IGZhaWxlZCBvbiBsaW5lICR7MX0iCn0KdHJhcCAnZXJyX3JlcG9ydCAke0xJTkVOT30nIEVSUgoKIyBrdWJlbGV0IGRlZmF1bHQKbWF4X3BvZHM9MTEwCgojIG1heCBwb2RzIGNhbid0IGJlIGdyZWF0ZXIgdGhhbiB0aGUgbnVtYmVyIG9mIGF2YWlsYWJsZSBJUHMgaW4gbm9kZUNpZHJNYXNrU2l6ZQojIFRoaXMgaXMgY2FsY3VsYXRlZCB1c2luZyB0aGUgbWF4UG9kc0Fic29sdXRlIGhlbHBlciBmcm9tIF9oZWxwZXJzLnRwbAptYXhfcG9kc19hYnNvbHV0ZT0xMTAKaWYgKCgkbWF4X3BvZHMgPiAkbWF4X3BvZHNfYWJzb2x1dGUpKTsgdGhlbgoJbWF4X3BvZHM9JG1heF9wb2RzX2Fic29sdXRlCmZpCgojIFVzZSBhIHVuaXF1ZSBzdWZmaXggc28gdGhpcyBjYW4ndCBhY2NpZGVudGFseSB1c2UgdGhlIHNhbWUgcGF0Y2ggZmlsZW5hbWVzIGFzIHRoZSBgY2x1c3RlcmAgY2hhcnQuCmNhdCA+IC90bXAva3ViZWxldGNvbmZpZ3VyYXRpb24xYXdzY29uZmlnK2pzb24ueWFtbCA8PEVPRgotIG9wOiByZXBsYWNlCiAgcGF0aDogL21heFBvZHMKICB2YWx1ZTogJHttYXhfcG9kc30KRU9GCm12IC90bXAva3ViZWxldGNvbmZpZ3VyYXRpb24xYXdzY29uZmlnK2pzb24ueWFtbCAvZXRjL2t1YmVybmV0ZXMvcGF0Y2hlcy9rdWJlbGV0Y29uZmlndXJhdGlvbjFhd3Njb25maWcranNvbi55YW1sCg==
+  - path: /etc/systemd/system/kubelet-aws-config.service
+    permissions: "0644"
+    encoding: base64
+    content: W1VuaXRdCkRlc2NyaXB0aW9uPUFkZCBBV1Mgc3BlY2lmaWMga3ViZWxldCBjb25maWd1cmF0aW9uCldhbnRzPW5ldHdvcmstb25saW5lLnRhcmdldApBZnRlcj1uZXR3b3JrLW9ubGluZS50YXJnZXQKQmVmb3JlPWt1YmVsZXQuc2VydmljZQoKW1NlcnZpY2VdClR5cGU9b25lc2hvdApSZW1haW5BZnRlckV4aXQ9eWVzCkV4ZWNTdGFydD0vb3B0L2Jpbi9rdWJlbGV0LWF3cy1jb25maWcuc2gKVGltZW91dFN0YXJ0U2VjPTIwClJlc3RhcnQ9b24tZmFpbHVyZQpSZXN0YXJ0U2VjPTEwCgpbSW5zdGFsbF0KV2FudGVkQnk9bXVsdGktdXNlci50YXJnZXQK
+  - path: /etc/systemd/network/99-unmanaged-devices.network
+    permissions: "0644"
+    encoding: base64
+    content: IyBGaWxlIG5vdCB1c2VkIGZvciBJUEFNIG1vZGUgJ2t1YmVybmV0ZXMnCg==
+  format: ignition
+  ignition:
+    containerLinuxConfig:
+      additionalConfig: |
+        systemd:
+          units:
+          - name: os-hardening.service
+            enabled: true
+            contents: |
+              [Unit]
+              Description=Apply os hardening
+              [Service]
+              Type=oneshot
+              ExecStartPre=-/bin/bash -c "gpasswd -d core rkt; gpasswd -d core docker; gpasswd -d core wheel"
+              ExecStartPre=/bin/bash -c "until [ -f '/etc/sysctl.d/hardening.conf' ]; do echo Waiting for sysctl file; sleep 1s;done;"
+              ExecStart=/usr/sbin/sysctl -p /etc/sysctl.d/hardening.conf
+              [Install]
+              WantedBy=multi-user.target
+          - name: update-engine.service
+            enabled: false
+            mask: true
+          - name: locksmithd.service
+            enabled: false
+            mask: true
+          - name: sshkeys.service
+            enabled: false
+            mask: true
+          - name: kubeadm.service
+            dropins:
+            - name: 10-flatcar.conf
+              contents: |
+                [Unit]
+                # kubeadm must run after coreos-metadata populated /run/metadata directory.
+                Requires=coreos-metadata.service
+                After=coreos-metadata.service
+                # kubeadm must run after containerd - see https://github.com/kubernetes-sigs/image-builder/issues/939.
+                After=containerd.service
+                # kubeadm requires having an IP
+                After=network-online.target
+                Wants=network-online.target
+                [Service]
+                # Ensure kubeadm service has access to kubeadm binary in /opt/bin on Flatcar.
+                Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/bin
+                # To make metadata environment variables available for pre-kubeadm commands.
+                EnvironmentFile=/run/metadata/*
+          - name: containerd.service
+            enabled: true
+            contents: |
+            dropins:
+            - name: 10-change-cgroup.conf
+              contents: |
+                [Service]
+                CPUAccounting=true
+                MemoryAccounting=true
+                Slice=kubereserved.slice
+          - name: auditd.service
+            enabled: false
+          - name: kubelet-aws-config.service
+            enabled: true
+          - name: var-lib.mount
+            enabled: true
+            contents: |
+              [Unit]
+              Description=lib volume
+              DefaultDependencies=no
+              [Mount]
+              What=/dev/disk/by-label/lib
+              Where=/var/lib
+              Type=xfs
+              [Install]
+              WantedBy=local-fs-pre.target
+          - name: var-log.mount
+            enabled: true
+            contents: |
+              [Unit]
+              Description=log volume
+              DefaultDependencies=no
+              [Mount]
+              What=/dev/disk/by-label/log
+              Where=/var/log
+              Type=xfs
+              [Install]
+              WantedBy=local-fs-pre.target
+        storage:
+          filesystems:
+          - name: lib
+            mount:
+              device: /dev/xvdd
+              format: xfs
+              wipeFilesystem: true
+              label: lib
+          - name: log
+            mount:
+              device: /dev/xvde
+              format: xfs
+              wipeFilesystem: true
+              label: log
+          directories:
+          - path: /var/lib/kubelet
+            mode: 0750
+
+  joinConfiguration:
+    nodeRegistration:
+      kubeletExtraArgs:
+      - name: cgroup-driver
+        value: systemd
+      - name: cloud-provider
+        value: external
+      - name: healthz-bind-address
+        value: 0.0.0.0
+      - name: node-ip
+        value: ${COREOS_EC2_IPV4_LOCAL}
+      - name: node-labels
+        value: ip=${COREOS_EC2_IPV4_LOCAL},role=worker,giantswarm.io/machine-pool=test-wc-gpu00
+      - name: v
+        value: "2"
+      name: ${COREOS_EC2_HOSTNAME}
+      taints:
+      - effect: NoExecute
+        key: ebs.csi.aws.com/agent-not-ready
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+      - effect: NoExecute
+        key: karpenter.sh/unregistered
+        value: karpenter
+    patches:
+      directory: /etc/kubernetes/patches
+  preKubeadmCommands:
+  - envsubst < /etc/kubeadm.yml > /etc/kubeadm.yml.tmp
+  - mv /etc/kubeadm.yml.tmp /etc/kubeadm.yml
+  - systemctl restart containerd
+  - rm -rf /var/lib/selinux
+  - cp -a /usr/lib/selinux/policy /var/lib/selinux
+  - semodule -DB
+  - semodule -i /etc/selinux/flatcar-containerd-patch.cil
+  - rm -f /etc/audit/rules.d/80-selinux.rules
+  - systemctl restart audit-rules
+  - rm -rf /etc/ssl/certs
+  - cp -a /usr/share/ca-certificates /etc/ssl/certs
+  - restorecon -RFv -e /usr /
+  - mkdir -p /var/log/apiserver
+  - chcon -R -t container_file_t /var/log/apiserver
+
+---
+# Source: gpu-node-pool/templates/machinepool.yaml
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachinePool
+metadata:
+  name: test-wc-gpu00
+  namespace: org-giantswarm
+  annotations:
+    cluster.x-k8s.io/replicas-managed-by: external-autoscaler
+    machine-pool.giantswarm.io/name: test-wc-gpu00
+  labels:
+    app: "gpu-node-pool"
+    app.kubernetes.io/name: "gpu-node-pool"
+    app.kubernetes.io/instance: "test-wc-gpu00"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/version: "0.0.1"
+    application.giantswarm.io/team: "bumblebee"
+    helm.sh/chart: "gpu-node-pool-0.0.0-dev"
+    cluster.x-k8s.io/cluster-name: "test-wc"
+    cluster.x-k8s.io/watch-filter: capi
+    giantswarm.io/cluster: "test-wc"
+    giantswarm.io/machine-pool: "test-wc-gpu00"
+    giantswarm.io/organization: "giantswarm"
+spec:
+  clusterName: test-wc
+  replicas: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiGroup: bootstrap.cluster.x-k8s.io
+          kind: KubeadmConfig
+          name: test-wc-gpu00-0ebd5
+      clusterName: test-wc
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: KarpenterMachinePool
+        name: test-wc-gpu00
+      version: v1.33.1

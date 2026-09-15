@@ -1,0 +1,29 @@
+# cluster-aws rendered offline (its own CI knobs) with one Karpenter worker pool,
+# the fixture cluster of hack/fixture/values.yaml.
+global:
+  release:
+    version: 29.1.0
+  managementCluster: test
+  metadata:
+    name: test-wc
+    organization: giantswarm
+  connectivity:
+    baseDomain: example.com
+  nodePools:
+    gpu00:
+      type: karpenter
+      requirements:
+        - key: kubernetes.io/os
+          operator: In
+          values:
+            - linux
+  providerSpecific:
+    region: "eu-west-1"
+    awsAccountId: "123456789012"
+internal:
+  awsPartition: "aws"
+cluster:
+  internal:
+    ephemeralConfiguration:
+      offlineTesting:
+        renderWithoutReleaseResource: true

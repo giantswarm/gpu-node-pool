@@ -1,0 +1,113 @@
+systemd:
+  units:
+  - name: os-hardening.service
+    enabled: true
+    contents: |
+      [Unit]
+      Description=Apply os hardening
+      [Service]
+      Type=oneshot
+      ExecStartPre=-/bin/bash -c "gpasswd -d core rkt; gpasswd -d core docker; gpasswd -d core wheel"
+      ExecStartPre=/bin/bash -c "until [ -f '/etc/sysctl.d/hardening.conf' ]; do echo Waiting for sysctl file; sleep 1s;done;"
+      ExecStart=/usr/sbin/sysctl -p /etc/sysctl.d/hardening.conf
+      [Install]
+      WantedBy=multi-user.target
+  - name: update-engine.service
+    enabled: false
+    mask: true
+  - name: locksmithd.service
+    enabled: false
+    mask: true
+  - name: sshkeys.service
+    enabled: false
+    mask: true
+  - name: kubeadm.service
+    dropins:
+    - name: 10-flatcar.conf
+      contents: |
+        [Unit]
+        # kubeadm must run after coreos-metadata populated /run/metadata directory.
+        Requires=coreos-metadata.service
+        After=coreos-metadata.service
+        # kubeadm must run after containerd - see https://github.com/kubernetes-sigs/image-builder/issues/939.
+        After=containerd.service
+        # kubeadm requires having an IP
+        After=network-online.target
+        Wants=network-online.target
+        [Service]
+        # Ensure kubeadm service has access to kubeadm binary in /opt/bin on Flatcar.
+        Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/bin
+        # To make metadata environment variables available for pre-kubeadm commands.
+        EnvironmentFile=/run/metadata/*
+  - name: containerd.service
+    enabled: true
+    contents: |
+    dropins:
+    - name: 10-change-cgroup.conf
+      contents: |
+        [Service]
+        CPUAccounting=true
+        MemoryAccounting=true
+        Slice=kubereserved.slice
+  - name: auditd.service
+    enabled: false
+{{- if .Values.teleport.enabled }}
+  - name: teleport.service
+    enabled: true
+    contents: |
+      [Unit]
+      Description=Teleport Service
+      After=network.target
+      [Service]
+      Type=simple
+      Restart=on-failure
+      ExecStart=/opt/bin/teleport start --roles=node --config=/etc/teleport.yaml --pid-file=/run/teleport.pid
+      ExecReload=/bin/kill -HUP $MAINPID
+      PIDFile=/run/teleport.pid
+      LimitNOFILE=524288
+      [Install]
+      WantedBy=multi-user.target
+{{- end }}
+  - name: kubelet-aws-config.service
+    enabled: true
+  - name: var-lib.mount
+    enabled: true
+    contents: |
+      [Unit]
+      Description=lib volume
+      DefaultDependencies=no
+      [Mount]
+      What=/dev/disk/by-label/lib
+      Where=/var/lib
+      Type=xfs
+      [Install]
+      WantedBy=local-fs-pre.target
+  - name: var-log.mount
+    enabled: true
+    contents: |
+      [Unit]
+      Description=log volume
+      DefaultDependencies=no
+      [Mount]
+      What=/dev/disk/by-label/log
+      Where=/var/log
+      Type=xfs
+      [Install]
+      WantedBy=local-fs-pre.target
+storage:
+  filesystems:
+  - name: lib
+    mount:
+      device: /dev/xvdd
+      format: xfs
+      wipeFilesystem: true
+      label: lib
+  - name: log
+    mount:
+      device: /dev/xvde
+      format: xfs
+      wipeFilesystem: true
+      label: log
+  directories:
+  - path: /var/lib/kubelet
+    mode: 0750

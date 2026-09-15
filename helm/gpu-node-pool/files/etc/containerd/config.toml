@@ -1,0 +1,40 @@
+version = 2
+
+# recommended defaults from https://github.com/containerd/containerd/blob/main/docs/ops.md#base-configuration
+# set containerd as a subreaper on linux when it is not running as PID 1
+subreaper = true
+# set containerd debug level
+[debug]
+  level = "info"
+
+# set containerd's OOM score
+oom_score = -999
+disabled_plugins = []
+[plugins."io.containerd.runtime.v1.linux"]
+# shim binary name/path
+shim = "containerd-shim"
+# runtime binary name/path
+runtime = "runc"
+# do not use a shim when starting containers, saves on memory but
+# live restore is not supported
+no_shim = false
+
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+# setting runc.options unsets parent settings
+runtime_type = "io.containerd.runc.v2"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+SystemdCgroup = true
+[plugins."io.containerd.grpc.v1.cri"]
+sandbox_image = "{{ .Values.cluster.containerRegistry }}/giantswarm/pause:3.10.1"
+enable_selinux = false
+
+[plugins."io.containerd.grpc.v1.cri".registry]
+  config_path = "/etc/containerd/certs.d"
+
+# add Nvidia container runtime to support GPUs
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia]
+  runtime_type = "io.containerd.runc.v2"
+  privileged_without_host_devices = false
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options]
+    BinaryName = "/usr/bin/nvidia-container-runtime"
+    SystemdCgroup = true

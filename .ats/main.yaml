@@ -3,11 +3,10 @@
 # kind cluster and hands ATS its kubeconfig; helm and kubectl come with the
 # ATS image.
 #
-# Smoke: ATS installs the packaged chart with `helm upgrade --install --wait`
-# and tests/ats/test_smoke.py asserts the cluster is reachable afterwards. The
-# chart renders Cluster API objects for an existing cluster; the fixture
-# cluster and the render goldens (make verify) are its own verification.
-#
-# functional and upgrade stay skipped: there is no second scenario yet, and no
-# released chart to upgrade from.
-skip-steps: [functional,upgrade]
+# Smoke, functional and upgrade are skipped: the chart renders Cluster API
+# objects (MachinePool, KubeadmConfig, KarpenterMachinePool) whose CRDs the ATS
+# kind cluster does not have, so an install cannot succeed there. ATS builds,
+# lints and validates the chart's metadata; the render goldens and the
+# bootstrap diff against cluster-aws (`make verify`, the Verify workflow) are
+# the chart's verification.
+skip-steps: [smoke,functional,upgrade]

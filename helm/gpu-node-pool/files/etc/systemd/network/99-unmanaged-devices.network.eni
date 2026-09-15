@@ -1,0 +1,10 @@
+# https://docs.cilium.io/en/latest/network/concepts/ipam/eni/#node-configuration
+#
+# For ENI mode, this ensures the Cilium-created network interfaces are not managed, so that they
+# do not get added to the host's default routes, for instance. The primary interface eth0
+# remains managed by systemd.
+[Match]
+Name=eth[1-9]*
+
+[Link]
+Unmanaged=yes

@@ -1,15 +1,84 @@
-# Default values for the gpu-node-pool chart.
+# Values of one GPU node pool: a Cluster API release of its own for an existing
+# Giant Swarm cluster. `<cluster.name>-<pool.name>` names the MachinePool and,
+# through it, the KubeadmConfig (hash-suffixed), the KarpenterMachinePool, the
+# Karpenter NodePool and EC2NodeClass and the S3 key of the bootstrap data.
 #
-# The pool's identity: the existing Cluster API cluster the pool joins and the
-# pool's own name; `<cluster>-<pool>` names the MachinePool and, through it, the
-# NodePool, EC2NodeClass and S3 key. The rest of the values contract (accelerator
-# and size, min/max, kubernetesVersion, AMI, teleport.enabled, the cluster
-# snapshot block) arrives with the templates; see README.md.
+# Registry credentials never go into these values inline: cluster-manager hands
+# them to the release through a `valuesFrom` Secret, and the chart reads them as
+# ordinary values from either source.
 
 cluster:
-  # -- Name of the existing Cluster API cluster the pool is created for.
+  # @schema required:true;pattern:^[a-z0-9][-a-z0-9]{0,18}[a-z0-9]$
+  # -- Name of the existing Cluster API cluster the pool joins.
   name: ""
+  # @schema required:true
+  # -- Organization owning the cluster; the release lives in `org-<organization>`.
+  organization: ""
+  # @schema required:true
+  # -- Base domain of the installation (the cluster's `global.connectivity.baseDomain`).
+  baseDomain: ""
+  # @schema required:true
+  # -- Name of the management cluster (the cluster's `global.managementCluster`).
+  managementCluster: ""
+  # -- Registry containerd pulls the sandbox (pause) image from.
+  containerRegistry: gsoci.azurecr.io
+  # @schema additionalProperties:true
+  # -- Registry mirrors as containerd `hosts.toml` files: registry host -> ordered
+  # list of endpoint hosts (a snapshot of the cluster's mirrors and local registry cache).
+  registryMirrors: {}
+  proxy:
+    # -- Route containerd, kubelet, teleport and the kubeadm commands through the cluster's HTTP proxy.
+    enabled: false
+    # -- HTTP proxy URL.
+    httpProxy: ""
+    # -- HTTPS proxy URL.
+    httpsProxy: ""
+    # -- Comma-separated no-proxy list as the cluster computes it.
+    noProxy: ""
+  cilium:
+    # @schema enum:[kubernetes,eni]
+    # -- Cilium IPAM mode of the cluster; decides the unmanaged-devices network unit.
+    ipamMode: kubernetes
+  kubelet:
+    # -- Maximum pods per node as the cluster's kubelet patch sets it.
+    maxPods: 110
 
 pool:
-  # -- Name of the node pool within the cluster.
+  # @schema required:true;pattern:^[a-z0-9][-a-z0-9]{3,18}[a-z0-9]$
+  # -- Name of the node pool within the cluster; five to twenty characters.
   name: ""
+  # @schema required:true;pattern:^[0-9]+\.[0-9]+\.[0-9]+$
+  # -- Kubernetes version the pool's nodes run (`1.33.1`), never newer than the control plane.
+  kubernetesVersion: ""
+  # @schema required:true
+  # -- Name of the Flatcar machine image (`flatcar-<channel>-<flatcar>-kube-<k8s>-tooling-<tooling>-gs`).
+  machineImage: ""
+  # @schema enum:[nvidia-l4,nvidia-a10g,nvidia-t4,nvidia-l40s]
+  # -- Accelerator from the curated list; picks the EC2 instance family.
+  accelerator: nvidia-l4
+  # @schema item:string;minItems:1
+  # -- Instance sizes Karpenter may pick within the accelerator's family, smallest first.
+  sizes:
+    - xlarge
+    - 2xlarge
+    - 4xlarge
+  # @schema enum:[0]
+  # -- Minimum size; Karpenter scales the pool to zero when nothing is scheduled.
+  minSize: 0
+  # @schema additionalProperties:true
+  # -- Upper bound of the pool, as Karpenter limits (resources across all of its nodes).
+  maxSize:
+    nvidia.com/gpu: "4"
+  # -- Time an empty or underutilized node lives before Karpenter consolidates it.
+  consolidateAfter: 10m
+  volumes:
+    # -- Root volume.
+    root: 15Gi
+    # -- `/var/lib` volume (container images, kubelet).
+    lib: 200Gi
+    # -- `/var/log` volume.
+    log: 30Gi
+
+teleport:
+  # -- Join the nodes to Teleport with the cluster's `<cluster>-teleport-join-token` Secret; off where the cluster has none.
+  enabled: true

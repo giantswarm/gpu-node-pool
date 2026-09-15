@@ -1,0 +1,30 @@
+version: v3
+teleport:
+  data_dir: /teleport
+  join_params:
+    token_name: /etc/teleport-join-token
+    method: token
+  proxy_server: teleport.giantswarm.io:443
+  log:
+    output: stderr
+auth_service:
+  enabled: "no"
+ssh_service:
+  enabled: "yes"
+  commands:
+  - name: node
+    command: [hostname]
+    period: 24h0m0s
+  - name: arch
+    command: [uname, -m]
+    period: 24h0m0s
+  - name: role
+    command: [/opt/teleport-node-role.sh]
+    period: 1m0s
+  labels:
+    ins: {{ .Values.cluster.managementCluster }}
+    mc: {{ .Values.cluster.managementCluster }}
+    cluster: {{ .Values.cluster.name }}
+    baseDomain: {{ .Values.cluster.baseDomain }}
+proxy_service:
+  enabled: "no"
