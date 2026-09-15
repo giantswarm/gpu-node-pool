@@ -9,7 +9,7 @@ metadata:
 spec:
   ec2NodeClass:
     amiSelectorTerms:
-    - name: {{ .Values.pool.machineImage }}
+    - name: {{ required "pool.machineImage is required" .Values.pool.machineImage }}
       owner: "706635527432"
     blockDeviceMappings:
     - deviceName: /dev/xvda

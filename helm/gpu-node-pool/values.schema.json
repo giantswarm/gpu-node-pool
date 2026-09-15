@@ -67,7 +67,7 @@
                 "name": {
                     "type": "string",
                     "description": "Name of the existing Cluster API cluster the pool joins.",
-                    "pattern": "^[a-z0-9][-a-z0-9]{0,18}[a-z0-9]$"
+                    "pattern": "^(|[a-z0-9][-a-z0-9]{0,18}[a-z0-9])$"
                 },
                 "organization": {
                     "type": "string",
@@ -151,7 +151,7 @@
                 "kubernetesVersion": {
                     "type": "string",
                     "description": "Kubernetes version the pool's nodes run (`1.33.1`), never newer than the control plane.",
-                    "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+                    "pattern": "^(|[0-9]+\\.[0-9]+\\.[0-9]+)$"
                 },
                 "machineImage": {
                     "type": "string",
@@ -177,7 +177,7 @@
                 "name": {
                     "type": "string",
                     "description": "Name of the node pool within the cluster; five to twenty characters.",
-                    "pattern": "^[a-z0-9][-a-z0-9]{3,18}[a-z0-9]$"
+                    "pattern": "^(|[a-z0-9][-a-z0-9]{3,18}[a-z0-9])$"
                 },
                 "sizes": {
                     "type": "array",

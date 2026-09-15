@@ -23,4 +23,4 @@ spec:
         apiGroup: infrastructure.cluster.x-k8s.io
         kind: KarpenterMachinePool
         name: {{ include "gpu-node-pool.poolName" . }}
-      version: v{{ .Values.pool.kubernetesVersion }}
+      version: v{{ required "pool.kubernetesVersion is required" .Values.pool.kubernetesVersion }}

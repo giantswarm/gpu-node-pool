@@ -35,7 +35,7 @@ app.kubernetes.io/instance: {{ .Release.Name | quote }}
 
 {{/* <cluster>-<pool>: the pool's identity everywhere. */}}
 {{- define "gpu-node-pool.poolName" -}}
-{{- printf "%s-%s" .Values.cluster.name .Values.pool.name -}}
+{{- printf "%s-%s" (required "cluster.name is required" .Values.cluster.name) (required "pool.name is required" .Values.pool.name) -}}
 {{- end -}}
 
 {{/* Labels the cluster charts set on a pool's objects. */}}
