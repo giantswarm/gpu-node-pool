@@ -1,0 +1,20 @@
+# The intentional differences between the pool's bootstrap and cluster-aws's
+# worker pool, as `<Kind> <dotted.path>` removed from both renders before the
+# diff. Anything else that differs fails `make verify`.
+# The pool's identity and the chart's own labels; the KubeadmConfig hash.
+- KarpenterMachinePool metadata
+- KubeadmConfig metadata
+- MachinePool metadata
+- MachinePool spec.template.spec.bootstrap.configRef.name
+# The pool's own pins.
+- MachinePool spec.template.spec.version
+- KarpenterMachinePool spec.ec2NodeClass.amiSelectorTerms
+# The GPU shape.
+- KarpenterMachinePool spec.ec2NodeClass.blockDeviceMappings
+- KarpenterMachinePool spec.nodePool.disruption
+- KarpenterMachinePool spec.nodePool.limits
+- KarpenterMachinePool spec.nodePool.template.spec.requirements
+- KarpenterMachinePool spec.nodePool.template.spec.taints
+- KubeadmConfig spec.joinConfiguration.nodeRegistration.taints
+# The block the KarpenterMachinePool controller overwrites; not carried.
+- KarpenterMachinePool spec.ec2NodeClass.kubelet

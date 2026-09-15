@@ -1,0 +1,26 @@
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachinePool
+metadata:
+  name: {{ include "gpu-node-pool.poolName" . }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    cluster.x-k8s.io/replicas-managed-by: external-autoscaler
+    machine-pool.giantswarm.io/name: {{ include "gpu-node-pool.poolName" . }}
+  labels:
+    {{- include "gpu-node-pool.poolLabels" . | nindent 4 }}
+spec:
+  clusterName: {{ .Values.cluster.name }}
+  replicas: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiGroup: bootstrap.cluster.x-k8s.io
+          kind: KubeadmConfig
+          name: {{ include "gpu-node-pool.kubeadmConfigName" . }}
+      clusterName: {{ .Values.cluster.name }}
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: KarpenterMachinePool
+        name: {{ include "gpu-node-pool.poolName" . }}
+      version: v{{ required "pool.kubernetesVersion is required" .Values.pool.kubernetesVersion }}

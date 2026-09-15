@@ -1,0 +1,17 @@
+# The fixture cluster: the inputs cluster-aws's own karpenter CI values describe
+# (hack/oracle/values.yaml), so the bootstrap diff compares like with like.
+# `ct lint` (the chart build) lints the chart with this file; `make verify`
+# renders the goldens from it.
+cluster:
+  name: test-wc
+  organization: giantswarm
+  baseDomain: example.com
+  managementCluster: test
+  registryMirrors:
+    gsoci.azurecr.io:
+      - zot.test.example.com
+      - gsoci.azurecr.io
+pool:
+  name: gpu00
+  kubernetesVersion: 1.33.1
+  machineImage: flatcar-stable-4230.2.1-kube-1.33.1-tooling-1.27.0-gs

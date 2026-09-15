@@ -1,0 +1,95 @@
+{{- $poolName := include "gpu-node-pool.poolName" . }}
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: KarpenterMachinePool
+metadata:
+  name: {{ $poolName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gpu-node-pool.poolLabels" . | nindent 4 }}
+spec:
+  ec2NodeClass:
+    amiSelectorTerms:
+    - name: {{ required "pool.machineImage is required" .Values.pool.machineImage }}
+      owner: "706635527432"
+    blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        deleteOnTermination: true
+        volumeSize: {{ .Values.pool.volumes.root }}
+        volumeType: gp3
+      rootVolume: true
+    - deviceName: /dev/xvdd
+      ebs:
+        deleteOnTermination: true
+        encrypted: true
+        volumeSize: {{ .Values.pool.volumes.lib }}
+        volumeType: gp3
+    - deviceName: /dev/xvde
+      ebs:
+        deleteOnTermination: true
+        encrypted: true
+        volumeSize: {{ .Values.pool.volumes.log }}
+        volumeType: gp3
+    instanceProfile: {{ .Values.cluster.name }}-worker
+    metadataOptions:
+      httpPutResponseHopLimit: 3
+      httpTokens: required
+    securityGroupSelectorTerms:
+    - tags:
+        sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .Values.cluster.name }}: owned
+        sigs.k8s.io/cluster-api-provider-aws/role: node
+    - tags:
+        sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .Values.cluster.name }}: owned
+        sigs.k8s.io/cluster-api-provider-aws/role: lb
+    subnetSelectorTerms:
+    - tags:
+        giantswarm.io/role: nodes
+        sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .Values.cluster.name }}: owned
+    tags:
+      Name: {{ $poolName }}
+  nodePool:
+    disruption:
+      consolidationPolicy: WhenEmptyOrUnderutilized
+      consolidateAfter: {{ .Values.pool.consolidateAfter }}
+    limits:
+      {{- toYaml .Values.pool.maxSize | nindent 6 }}
+    template:
+      metadata:
+        labels:
+          giantswarm.io/machine-pool: {{ $poolName }}
+      spec:
+        requirements:
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values:
+          - {{ include "gpu-node-pool.instanceFamily" . }}
+        - key: karpenter.k8s.aws/instance-size
+          operator: In
+          values:
+          {{- toYaml .Values.pool.sizes | nindent 10 }}
+        - key: kubernetes.io/arch
+          operator: In
+          values:
+          - amd64
+        - key: kubernetes.io/os
+          operator: In
+          values:
+          - linux
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values:
+          - on-demand
+        startupTaints:
+        - effect: NoSchedule
+          key: node.cluster.x-k8s.io/uninitialized
+          value: "true"
+        - effect: NoSchedule
+          key: node.cilium.io/agent-not-ready
+          value: "true"
+        - effect: NoExecute
+          key: ebs.csi.aws.com/agent-not-ready
+          value: "true"
+        taints:
+        - effect: NoSchedule
+          key: nvidia.com/gpu
+        terminationGracePeriod: 30m

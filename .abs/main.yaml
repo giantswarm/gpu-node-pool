@@ -2,3 +2,6 @@ replace-chart-version-with-git: true
 generate-metadata: true
 chart-dir: ./helm/gpu-node-pool
 destination: ./build
+# The templates refuse empty cluster.name / pool.name (`required`), so the
+# render validation uses the fixture cluster, as ct lint does.
+helm-template-extra-values: helm/gpu-node-pool/ci/ci-values.yaml

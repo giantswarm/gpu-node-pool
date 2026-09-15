@@ -1,0 +1,11 @@
+; Flatcar containerd/runc runs as kernel_t (because of unlabeled /usr)
+; kernel_t doesn't have the right permissions for a container runtime, but container_engine_t does.
+; container_engine_t belongs to container_engine_domain and container_engine_system_domain, which provide those permissions
+
+; TODO: Remove when containerd/runc doesn't run as kernel_t
+; HACK: Add kernel_t to container_engine_domain and container_engine_system_domain
+(typeattributeset container_engine_domain (kernel_t))
+(typeattributeset container_engine_system_domain (kernel_t))
+; HACK: Allow container_domain to access kernel_t for container operations (copied from container_t perms)
+(allow container_domain kernel_t (fd (use)))
+(allow container_domain kernel_t (fifo_file (append getattr ioctl open read write)))

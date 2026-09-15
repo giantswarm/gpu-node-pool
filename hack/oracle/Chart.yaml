@@ -1,0 +1,11 @@
+# The CI oracle: the newest released cluster-aws, pinned here for Renovate's
+# helmv3 manager to bump. `make verify` renders this chart's worker pool with
+# hack/oracle/values.yaml and diffs its bootstrap against ours; a bump that
+# changes the worker bootstrap fails CI until the chart follows.
+apiVersion: v2
+name: oracle
+version: 0.0.0
+dependencies:
+  - name: cluster-aws
+    version: 10.3.0
+    repository: https://giantswarm.github.io/cluster-catalog

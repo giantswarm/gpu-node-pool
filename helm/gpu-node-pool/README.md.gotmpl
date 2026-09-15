@@ -9,6 +9,70 @@
 
 {{ template "chart.sourcesSection" . }}
 
+## What the chart renders
+
+For an existing Cluster API cluster named in its values the chart renders exactly three objects
+in the release's namespace (`org-<organization>`) and no Secret of its own:
+
+- a **`MachinePool`** `<cluster>-<pool>` with `version` the pool's own Kubernetes version,
+- a **`KubeadmConfig`** `<cluster>-<pool>-<hash>` carrying the worker bootstrap of a CAPA Flatcar
+  Karpenter worker with every file inline; the hash covers the whole spec, so a bootstrap change
+  renames the object and rolls the nodes,
+- a **`KarpenterMachinePool`** `<cluster>-<pool>` with the GPU shape: the instance family of the
+  chosen accelerator, the `nvidia.com/gpu` `NoSchedule` taint, consolidation down to zero nodes.
+
+The nodes carry the label `giantswarm.io/machine-pool=<cluster>-<pool>`; the accelerator is read
+from gpu-feature-discovery's `nvidia.com/gpu.product`. The only object referenced by name outside
+the release is the cluster's `<cluster>-teleport-join-token` Secret, behind `teleport.enabled`.
+Nothing references an object the cluster's release renames on upgrade.
+
+## Values contract
+
+| Block | What it is | Who sets it |
+|---|---|---|
+| `cluster.name`, `cluster.organization` | the existing cluster | the person, through cluster-manager |
+| `pool.name` | `^[a-z0-9][-a-z0-9]{3,18}[a-z0-9]$` — five to twenty characters, `gpu00` or `gpu-l4`, not `gpu`; `<cluster>-<pool>` becomes the NodePool, EC2NodeClass and S3 key | the person |
+| `pool.accelerator`, `pool.sizes` | one of the curated list (`nvidia-l4` → `g6`, `nvidia-a10g` → `g5`, `nvidia-t4` → `g4dn`, `nvidia-l40s` → `g6e`) and the instance sizes Karpenter may pick | the person |
+| `pool.minSize`, `pool.maxSize` | `0` — Karpenter scales the pool to zero — and the Karpenter `limits` bounding it (`nvidia.com/gpu`, `cpu`, `memory`) | the person |
+| `pool.kubernetesVersion`, `pool.machineImage` | the pool's own pins | cluster-manager, from the cluster's Release CR at creation |
+| `teleport.enabled` | join the nodes to Teleport | cluster-manager, from the presence of `<cluster>-teleport-join-token` |
+| `cluster.baseDomain`, `cluster.managementCluster`, `cluster.containerRegistry`, `cluster.registryMirrors`, `cluster.proxy`, `cluster.cilium.ipamMode`, `cluster.kubelet.maxPods` | the snapshot of the cluster's settings the bootstrap needs | cluster-manager, from the cluster's values and `AWSCluster` at creation; refreshed by a re-run |
+
+**Credentials never go into `spec.values`.** Where a cluster has registry credentials, the
+release receives them through a `valuesFrom` Secret beside the HelmRelease; the chart reads them
+as ordinary values from either source.
+
+## The skew rule
+
+The pool pins its own Kubernetes version and machine image. A cluster upgrade never touches
+them; they move only when the pool's values move. A pool is never newer than the control plane —
+cluster-manager refuses it, and the `KarpenterMachinePool` controller's version-skew check blocks
+it anyway. How far a pool may lag is the Kubernetes skew policy.
+
+## Deletion with the cluster
+
+Cluster API owns the `MachinePool` through the `Cluster` and deletes it — with its
+`KubeadmConfig` and `KarpenterMachinePool` — when the cluster is deleted; the
+`KarpenterMachinePool` finalizer waits for zero instances. The pool's HelmRelease and
+OCIRepository: **in apply mode** they carry an ownerReference to the `Cluster`, so garbage
+collection removes them and helm-controller uninstalls on the way; **in commit mode** the files
+carry no ownerReference (a Cluster UID never goes into git) and deletion with the cluster is the
+person's live step.
+
+## Pinning the chart
+
+Pin the chart version exactly in the HelmRelease. A bootstrap change rolls GPU nodes under a
+served model; bumps are meant to be explicit.
+
+## Guarding the bootstrap
+
+`make verify` renders the fixture cluster (`ci/ci-values.yaml`, which `ct lint` uses as well) for every accelerator with and without
+teleport, compares the goldens, and diffs the bootstrap — as the node sees it, files resolved —
+against the newest released cluster-aws, pinned in `hack/oracle/Chart.yaml` and bumped by
+Renovate. The intentional differences are the one list in `hack/oracle/whitelist.yaml`; any other
+difference fails CI, so a cluster-aws bump that changes the worker bootstrap fails until the chart
+follows. `make goldens` rewrites the goldens.
+
 {{ template "chart.requirementsSection" . }}
 
 {{ template "chart.valuesSection" . }}

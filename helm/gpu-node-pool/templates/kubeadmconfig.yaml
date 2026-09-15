@@ -1,0 +1,11 @@
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: KubeadmConfig
+metadata:
+  name: {{ include "gpu-node-pool.kubeadmConfigName" . }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    machine-pool.giantswarm.io/name: {{ include "gpu-node-pool.poolName" . }}
+  labels:
+    {{- include "gpu-node-pool.poolLabels" . | nindent 4 }}
+spec:
+  {{- include "gpu-node-pool.kubeadmConfigSpec" . | nindent 2 }}
