@@ -29,6 +29,6 @@ The repository carries the chart's skeleton and CI. The templates, the values co
 
 ## Installing
 
-The chart is released to the Giant Swarm catalog (`oci://gsoci.azurecr.io/giantswarm/gpu-node-pool`) and installed
+The chart is released to the Giant Swarm catalog (`oci://gsoci.azurecr.io/charts/giantswarm/gpu-node-pool`) and installed
 as a Flux `HelmRelease` with an exactly pinned chart version — a bootstrap change rolls GPU nodes, so bumps are
 explicit.
