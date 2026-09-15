@@ -4,7 +4,7 @@ Karpenter worker, files inline, the pool's identity and the GPU taint added.
 `make verify` diffs it against the newest released cluster-aws.
 */}}
 {{- define "gpu-node-pool.kubeadmConfigSpec" -}}
-{{- $poolName := include "gpu-node-pool.poolName" . }}
+{{- $poolName := include "gpu-node-pool.poolName" . -}}
 files:
 {{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/sysctl.d/hardening.conf" "permissions" "0644") }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/etc/containerd/config.toml" "permissions" "0644") }}
@@ -40,7 +40,7 @@ format: ignition
 ignition:
   containerLinuxConfig:
     additionalConfig: |
-{{ tpl (.Files.Get "files/ignition.yaml") . | indent 6 }}
+{{ tpl (.Files.Get "files/ignition.yaml") . | trimSuffix "\n" | indent 6 }}
 joinConfiguration:
   nodeRegistration:
     kubeletExtraArgs:
