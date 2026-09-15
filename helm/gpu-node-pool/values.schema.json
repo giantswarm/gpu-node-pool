@@ -20,7 +20,13 @@
         },
         "cluster": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of the existing Cluster API cluster the pool is created for."
+                }
+            }
         },
         "clusterCA": {
             "type": "string"
@@ -45,29 +51,18 @@
             "description": "Global values shared between all subcharts",
             "$comment": "Added automatically by 'helm schema' to allow this chart to be used as a Helm dependency, as this schema would otherwise not allow Helm's special 'global' values key."
         },
-        "image": {
+        "pool": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
                 "name": {
-                    "type": "string"
-                },
-                "tag": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Name of the node pool within the cluster."
                 }
             }
         },
         "provider": {
             "type": "string"
-        },
-        "registry": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "domain": {
-                    "type": "string"
-                }
-            }
         },
         "subscriptionID": {
             "type": "string"

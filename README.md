@@ -1,68 +1,34 @@
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/giantswarm/gpu-node-pool/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/giantswarm/gpu-node-pool/tree/main)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/giantswarm/gpu-node-pool/badge)](https://securityscorecards.dev/viewer/?uri=github.com/giantswarm/gpu-node-pool)
 
-[Guide about how to manage an app on Giant Swarm](https://handbook.giantswarm.io/docs/dev-and-releng/app-developer-processes/adding_app_to_appcatalog/)
+# gpu-node-pool
 
-# gpu-node-pool chart
+A GPU node pool on an existing Giant Swarm cluster is today a `nodePools` entry in the cluster's values: a pull
+request against the cluster's definition, re-rendered by the cluster's release on every upgrade, and out of reach for
+the Agent Platform — App CRs are deprecated, no one may edit a cluster's App CR or HelmRelease, and the platform's
+Models pages have nothing to add GPU capacity with. Depending on the shared `cluster` chart or copying the cluster's
+own worker pool both bind the pool to one cluster release: the first renders the release's containerd Secret under
+the same name and hook Jobs that act on the cluster's own objects, the second has to be re-derived on every cluster
+upgrade and never gets a lifecycle of its own.
 
-Giant Swarm offers a gpu-node-pool App which can be installed in workload clusters.
-Here, we define the gpu-node-pool chart with its templates and default configuration.
+This chart makes a GPU node pool **its own Cluster API release with its own bootstrap and lifecycle**: one Flux
+HelmRelease per pool in `org-<org>`, rendering for an existing Cluster API cluster named in its values a
+`MachinePool`, a hash-named `KubeadmConfig` carrying the chart's own worker bootstrap (the rendered CAPA Flatcar
+Karpenter worker spec with its files inline, no chart-owned Secrets), and a `KarpenterMachinePool` in the GPU shape
+(instance families from a curated accelerator list, the `nvidia.com/gpu` taint, scale to zero). The pool pins its own
+Kubernetes version and machine image — never newer than the control plane — so a cluster upgrade never touches it,
+and it is deleted with the cluster through Cluster API's owner references. Consumers are cluster-manager
+(`create_node_pool`, `delete_node_pool`) and the Dev Portal's *Add GPU node pool* dialog. Decided in
+[bumblebee-plans#46](https://github.com/giantswarm/bumblebee-plans/pull/46) (D3); tracked in
+[giantswarm/giantswarm#37713](https://github.com/giantswarm/giantswarm/issues/37713).
 
-**What is this app?**
+## Status
 
-**Why did we add it?**
-
-**Who can use it?**
+The repository carries the chart's skeleton and CI. The templates, the values contract and the bootstrap oracle
+(`make verify` against the newest `cluster-aws`) follow in giantswarm/giantswarm#37713.
 
 ## Installing
 
-There are several ways to install this app onto a workload cluster.
-
-- [Using GitOps to instantiate the App](https://docs.giantswarm.io/tutorials/continuous-deployment/apps/add-appcr/)
-- By creating an [App resource](https://docs.giantswarm.io/reference/platform-api/crd/apps.application.giantswarm.io) using the platform API as explained in [Getting started with App Platform](https://docs.giantswarm.io/tutorials/fleet-management/app-platform/).
-
-## Configuring
-
-### values.yaml
-
-**This is an example of a values file you could upload using our web interface.**
-
-```yaml
-# values.yaml
-
-```
-
-### Sample App CR and ConfigMap for the management cluster
-
-If you have access to the Kubernetes API on the management cluster, you could create the App CR and ConfigMap directly.
-
-Here is an example that would install the app to workload cluster `abc12`:
-
-```yaml
-# appCR.yaml
-
-```
-
-```yaml
-# user-values-configmap.yaml
-
-```
-
-See our [full reference on how to configure apps](https://docs.giantswarm.io/tutorials/fleet-management/app-platform/app-configuration/) for more details.
-
-## Compatibility
-
-This app has been tested to work with the following workload cluster release versions:
-
-- _add release version_
-
-## Limitations
-
-Some apps have restrictions on how they can be deployed.
-Not following these limitations will most likely result in a broken deployment.
-
-- _add limitation_
-
-## Credit
-
-- {APP HELM REPOSITORY}
+The chart is released to the Giant Swarm catalog (`oci://gsoci.azurecr.io/giantswarm/gpu-node-pool`) and installed
+as a Flux `HelmRelease` with an exactly pinned chart version — a bootstrap change rolls GPU nodes, so bumps are
+explicit.
