@@ -1,12 +1,15 @@
-# This file is a Helm values file for the gpu-node-pool chart.
+# Default values for the gpu-node-pool chart.
 #
-# To learn more about how to configure your app on your cluster
-# and override the default values in here, visit:
-#
-#   https://docs.giantswarm.io/tutorials/fleet-management/app-platform/app-configuration/#basic-values-merging-example
-#
-image:
-  name: "giantswarm/gpu-node-pool"
-  tag: ""
-registry:
-  domain: gsoci.azurecr.io
+# The pool's identity: the existing Cluster API cluster the pool joins and the
+# pool's own name; `<cluster>-<pool>` names the MachinePool and, through it, the
+# NodePool, EC2NodeClass and S3 key. The rest of the values contract (accelerator
+# and size, min/max, kubernetesVersion, AMI, teleport.enabled, the cluster
+# snapshot block) arrives with the templates; see README.md.
+
+cluster:
+  # -- Name of the existing Cluster API cluster the pool is created for.
+  name: ""
+
+pool:
+  # -- Name of the node pool within the cluster.
+  name: ""
