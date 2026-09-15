@@ -1,5 +1,7 @@
 # The fixture cluster: the inputs cluster-aws's own karpenter CI values describe
 # (hack/oracle/values.yaml), so the bootstrap diff compares like with like.
+# `ct lint` (the chart build) lints the chart with this file; `make verify`
+# renders the goldens from it.
 cluster:
   name: test-wc
   organization: giantswarm

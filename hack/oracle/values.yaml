@@ -1,5 +1,5 @@
 # cluster-aws rendered offline (its own CI knobs) with one Karpenter worker pool,
-# the fixture cluster of hack/fixture/values.yaml.
+# the fixture cluster of helm/gpu-node-pool/ci/ci-values.yaml.
 global:
   release:
     version: 29.1.0

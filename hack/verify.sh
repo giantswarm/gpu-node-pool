@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 
 chart=helm/gpu-node-pool
 fixture=hack/fixture
+values=$chart/ci/ci-values.yaml
 release=test-wc-gpu00
 namespace=org-giantswarm
 mode=${1:-verify}
@@ -14,7 +15,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 render() {
-  helm template "$release" "$chart" -n "$namespace" -f "$fixture/values.yaml" "$@"
+  helm template "$release" "$chart" -n "$namespace" -f "$values" "$@"
 }
 
 status=0
