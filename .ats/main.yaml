@@ -1,0 +1,13 @@
+# app-test-suite (ATS >= 1.0) config, consumed by the generated
+# `run-tests-with-ats` CircleCI job (execute-chart-tests). The job creates the
+# kind cluster and hands ATS its kubeconfig; helm and kubectl come with the
+# ATS image.
+#
+# Smoke: ATS installs the packaged chart with `helm upgrade --install --wait`
+# and tests/ats/test_smoke.py asserts the cluster is reachable afterwards. The
+# chart renders Cluster API objects for an existing cluster; the fixture
+# cluster and the render goldens (make verify) are its own verification.
+#
+# functional and upgrade stay skipped: there is no second scenario yet, and no
+# released chart to upgrade from.
+skip-steps: [functional,upgrade]
