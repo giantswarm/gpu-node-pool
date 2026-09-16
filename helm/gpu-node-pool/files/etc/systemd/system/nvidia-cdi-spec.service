@@ -1,0 +1,25 @@
+[Unit]
+Description=NVIDIA CDI specification of the image's driver for the container runtime
+Documentation=https://github.com/giantswarm/gpu-node-pool
+# The driver comes up with nvidia.service (Flatcar's setup-nvidia); the
+# specification describes it, so it is written after that and only then.
+Requires=nvidia.service
+After=nvidia.service
+ConditionPathExists=/usr/bin/nvidia-ctk
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# /usr/bin before /opt/bin: the driver's binaries are installed under /opt/bin
+# with symlinks in /usr/bin. The specification mounts a binary at the path it
+# was found at, and /usr/bin is on every container's PATH where /opt/bin is not.
+Environment=PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/bin:/sbin
+# The nvidia runtime injects what the specification says (mode cdi) instead of
+# discovering the driver per container through containerd's PATH (mode auto).
+ExecStartPre=/usr/bin/nvidia-ctk config --in-place --set nvidia-container-runtime.mode=cdi
+ExecStart=/usr/bin/nvidia-ctk cdi generate --output=/var/run/cdi/nvidia.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
