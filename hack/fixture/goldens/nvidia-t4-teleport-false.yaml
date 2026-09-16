@@ -113,7 +113,7 @@ spec:
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: KubeadmConfig
 metadata:
-  name: test-wc-gpu00-deec7
+  name: test-wc-gpu00-2d8e1
   namespace: org-giantswarm
   annotations:
     machine-pool.giantswarm.io/name: test-wc-gpu00
@@ -172,6 +172,10 @@ spec:
     permissions: "0644"
     encoding: base64
     content: W1VuaXRdCkRlc2NyaXB0aW9uPUFkZCBBV1Mgc3BlY2lmaWMga3ViZWxldCBjb25maWd1cmF0aW9uCldhbnRzPW5ldHdvcmstb25saW5lLnRhcmdldApBZnRlcj1uZXR3b3JrLW9ubGluZS50YXJnZXQKQmVmb3JlPWt1YmVsZXQuc2VydmljZQoKW1NlcnZpY2VdClR5cGU9b25lc2hvdApSZW1haW5BZnRlckV4aXQ9eWVzCkV4ZWNTdGFydD0vb3B0L2Jpbi9rdWJlbGV0LWF3cy1jb25maWcuc2gKVGltZW91dFN0YXJ0U2VjPTIwClJlc3RhcnQ9b24tZmFpbHVyZQpSZXN0YXJ0U2VjPTEwCgpbSW5zdGFsbF0KV2FudGVkQnk9bXVsdGktdXNlci50YXJnZXQK
+  - path: /etc/systemd/system/nvidia-cdi-spec.service
+    permissions: "0644"
+    encoding: base64
+    content: W1VuaXRdCkRlc2NyaXB0aW9uPU5WSURJQSBDREkgc3BlY2lmaWNhdGlvbiBvZiB0aGUgaW1hZ2UncyBkcml2ZXIgZm9yIHRoZSBjb250YWluZXIgcnVudGltZQpEb2N1bWVudGF0aW9uPWh0dHBzOi8vZ2l0aHViLmNvbS9naWFudHN3YXJtL2dwdS1ub2RlLXBvb2wKIyBUaGUgZHJpdmVyIGNvbWVzIHVwIHdpdGggbnZpZGlhLnNlcnZpY2UgKEZsYXRjYXIncyBzZXR1cC1udmlkaWEpOyB0aGUKIyBzcGVjaWZpY2F0aW9uIGRlc2NyaWJlcyBpdCwgc28gaXQgaXMgd3JpdHRlbiBhZnRlciB0aGF0IGFuZCBvbmx5IHRoZW4uClJlcXVpcmVzPW52aWRpYS5zZXJ2aWNlCkFmdGVyPW52aWRpYS5zZXJ2aWNlCkNvbmRpdGlvblBhdGhFeGlzdHM9L3Vzci9iaW4vbnZpZGlhLWN0awoKW1NlcnZpY2VdClR5cGU9b25lc2hvdApSZW1haW5BZnRlckV4aXQ9eWVzCiMgL3Vzci9iaW4gYmVmb3JlIC9vcHQvYmluOiB0aGUgZHJpdmVyJ3MgYmluYXJpZXMgYXJlIGluc3RhbGxlZCB1bmRlciAvb3B0L2JpbgojIHdpdGggc3ltbGlua3MgaW4gL3Vzci9iaW4uIFRoZSBzcGVjaWZpY2F0aW9uIG1vdW50cyBhIGJpbmFyeSBhdCB0aGUgcGF0aCBpdAojIHdhcyBmb3VuZCBhdCwgYW5kIC91c3IvYmluIGlzIG9uIGV2ZXJ5IGNvbnRhaW5lcidzIFBBVEggd2hlcmUgL29wdC9iaW4gaXMgbm90LgpFbnZpcm9ubWVudD1QQVRIPS91c3IvbG9jYWwvYmluOi91c3IvYmluOi91c3IvbG9jYWwvc2JpbjovdXNyL3NiaW46L2Jpbjovc2JpbgojIFRoZSBudmlkaWEgcnVudGltZSBpbmplY3RzIHdoYXQgdGhlIHNwZWNpZmljYXRpb24gc2F5cyAobW9kZSBjZGkpIGluc3RlYWQgb2YKIyBkaXNjb3ZlcmluZyB0aGUgZHJpdmVyIHBlciBjb250YWluZXIgdGhyb3VnaCBjb250YWluZXJkJ3MgUEFUSCAobW9kZSBhdXRvKS4KRXhlY1N0YXJ0UHJlPS91c3IvYmluL252aWRpYS1jdGsgY29uZmlnIC0taW4tcGxhY2UgLS1zZXQgbnZpZGlhLWNvbnRhaW5lci1ydW50aW1lLm1vZGU9Y2RpCkV4ZWNTdGFydD0vdXNyL2Jpbi9udmlkaWEtY3RrIGNkaSBnZW5lcmF0ZSAtLW91dHB1dD0vdmFyL3J1bi9jZGkvbnZpZGlhLnlhbWwKUmVzdGFydD1vbi1mYWlsdXJlClJlc3RhcnRTZWM9NQoKW0luc3RhbGxdCldhbnRlZEJ5PW11bHRpLXVzZXIudGFyZ2V0Cg==
   - path: /etc/systemd/network/99-unmanaged-devices.network
     permissions: "0644"
     encoding: base64
@@ -234,6 +238,8 @@ spec:
           - name: auditd.service
             enabled: false
           - name: kubelet-aws-config.service
+            enabled: true
+          - name: nvidia-cdi-spec.service
             enabled: true
           - name: var-lib.mount
             enabled: true
@@ -350,7 +356,7 @@ spec:
         configRef:
           apiGroup: bootstrap.cluster.x-k8s.io
           kind: KubeadmConfig
-          name: test-wc-gpu00-deec7
+          name: test-wc-gpu00-2d8e1
       clusterName: test-wc
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io

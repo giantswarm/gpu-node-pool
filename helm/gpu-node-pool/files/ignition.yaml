@@ -70,6 +70,8 @@ systemd:
 {{- end }}
   - name: kubelet-aws-config.service
     enabled: true
+  - name: nvidia-cdi-spec.service
+    enabled: true
   - name: var-lib.mount
     enabled: true
     contents: |

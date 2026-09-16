@@ -6,11 +6,20 @@ Usage: bootstrap_diff.py <oracle-render.yaml> <our-render.yaml> <pool> <whitelis
 From each render the pool's MachinePool, KubeadmConfig and KarpenterMachinePool
 are taken (label giantswarm.io/machine-pool=<pool>), every file's content is
 resolved inline (base64 decoded, contentFrom.secret resolved from Secrets of the
-same render where present), trailing whitespace is normalized, the whitelisted
-paths are removed from both, and what remains must be identical.
+same render where present), the Ignition config's additionalConfig is decoded
+from its YAML string, trailing whitespace is normalized, the whitelisted paths
+are removed from both, and what remains must be identical.
+
+A whitelist entry is `<Kind> <dotted.path>`. A path segment may select elements
+of a list instead of removing the whole list: `files[path=/etc/x]` removes the
+mappings whose `path` is `/etc/x`, `preKubeadmCommands[=systemctl start x]`
+removes the scalar equal to the text after `=`. A selector in the middle of a
+path descends into the one matching element, so a unit added inside the
+Ignition config is `... additionalConfig.systemd.units[name=x.service]`.
 """
 import base64
 import difflib
+import re
 import sys
 
 import yaml
@@ -37,6 +46,9 @@ def load(path, pool):
             elif f.get("encoding") == "base64":
                 f["content"] = base64.b64decode(f["content"]).decode()
                 f["encoding"] = "plain"
+        clc = d.get("spec", {}).get("ignition", {}).get("containerLinuxConfig", {})
+        if isinstance(clc.get("additionalConfig"), str):
+            clc["additionalConfig"] = yaml.safe_load(clc["additionalConfig"])
         out[d["kind"]] = normalize(d)
     return out
 
@@ -51,15 +63,40 @@ def normalize(node):
     return node
 
 
+SEGMENT = re.compile(r"^([^\[]*)(?:\[([^\]=]*)=([^\]]*)\])?$")
+
+
+def segment(text):
+    """A path segment as (key, selector); the selector is None or (field, value),
+    an empty field selecting a scalar list element equal to the value."""
+    key, field, value = SEGMENT.match(text).groups()
+    return key, (None if field is None else (field, value))
+
+
+def selected(element, selector):
+    field, value = selector
+    if field == "":
+        return isinstance(element, str) and element == value
+    return isinstance(element, dict) and str(element.get(field)) == value
+
+
 def remove(objs, kind, dotted):
     node = objs.get(kind)
-    keys = dotted.split(".")
-    for k in keys[:-1]:
-        node = node.get(k) if isinstance(node, dict) else None
+    segments = re.split(r"\.(?![^\[]*\])", dotted)
+    for text in segments[:-1]:
+        key, selector = segment(text)
+        node = node.get(key) if isinstance(node, dict) else None
+        if selector is not None and isinstance(node, list):
+            node = next((e for e in node if selected(e, selector)), None)
         if node is None:
             return
-    if isinstance(node, dict):
-        node.pop(keys[-1], None)
+    key, selector = segment(segments[-1])
+    if not isinstance(node, dict):
+        return
+    if selector is None:
+        node.pop(key, None)
+    elif isinstance(node.get(key), list):
+        node[key] = [e for e in node[key] if not selected(e, selector)]
 
 
 def main():

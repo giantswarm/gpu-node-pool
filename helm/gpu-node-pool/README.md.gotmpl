@@ -42,6 +42,37 @@ Nothing references an object the cluster's release renames on upgrade.
 release receives them through a `valuesFrom` Secret beside the HelmRelease; the chart reads them
 as ordinary values from either source.
 
+## The image contract: what the image provides, what the pool configures
+
+The nodes run the Giant Swarm Flatcar image (`flatcar-<channel>-<flatcar>-kube-<k8s>-tooling-<tooling>-gs`,
+built by capi-image-builder). For GPUs it provides:
+
+- the **NVIDIA driver**: Flatcar's `nvidia.service` (`setup-nvidia`) builds the driver for the running
+  kernel at boot and merges it into `/usr` as a system extension — kernel modules, `libcuda.so`,
+  `libnvidia-ml.so` and friends under `/usr/lib64`, `nvidia-smi` and the other driver binaries under
+  `/opt/bin` with symlinks in `/usr/bin`;
+- the **NVIDIA container toolkit** as the `nvidia-runtime` system extension: `nvidia-container-runtime`,
+  `nvidia-ctk`, `nvidia-cdi-hook` in `/usr/bin`, its configuration in `/etc/nvidia-container-runtime/config.toml`
+  (`mode = "auto"`), its `nvidia-cdi-refresh` units present but not enabled;
+- **containerd** with the `nvidia` runtime handler (`BinaryName /usr/bin/nvidia-container-runtime`, `runc`
+  stays the default) and CDI on (`enable_cdi`, spec dirs `/etc/cdi` and `/var/run/cdi`).
+
+The pool's bootstrap adds one unit, `nvidia-cdi-spec.service`, ordered after `nvidia.service`: it sets the
+runtime to `mode = "cdi"` and writes the CDI specification of the driver to `/var/run/cdi/nvidia.yaml`
+(`nvidia-ctk cdi generate`) with `/usr/bin` ahead of `/opt/bin` on its PATH. In `auto` mode the runtime
+generates that specification per container instead, locating the driver's binaries through containerd's
+PATH, which puts `/opt/bin` first on this image; `nvidia-smi` then lands at `/opt/bin/nvidia-smi` inside
+the container, off every container's PATH, and the GPU operator's toolkit validation
+(`nvidia-smi` under RuntimeClass `nvidia`) never passes. With the specification written once, the
+runtime injects exactly what it says, `nvidia-smi` at `/usr/bin/nvidia-smi` included.
+
+The GPU operator runs on the `flatcar` row of cluster-manager's table: `driver.enabled=false`,
+`toolkit.enabled=false`, operands under RuntimeClass `nvidia`, `cdi.enabled=true`. Its operands get every
+GPU through the runtime (`NVIDIA_VISIBLE_DEVICES=all` → `nvidia.com/gpu=all` from the specification);
+workloads requesting `nvidia.com/gpu` get theirs through the device plugin's CDI devices, which containerd
+injects natively. A node is a GPU node once `nvidia.com/gpu` is allocatable and the ClusterPolicy is
+`ready`; no step on the node is left to a person.
+
 ## The skew rule
 
 The pool pins its own Kubernetes version and machine image. A cluster upgrade never touches
