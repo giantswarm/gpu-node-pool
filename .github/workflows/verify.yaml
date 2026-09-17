@@ -11,5 +11,5 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
-      - run: pip install pyyaml
+      - run: pip install pyyaml jsonschema
       - run: make verify

@@ -1,4 +1,9 @@
 {{- $poolName := include "gpu-node-pool.poolName" . }}
+{{- $lib := .Values.pool.volumes }}
+{{- /* gp3 provisions at most 0.25 MiB/s per IOPS; EC2 refuses the launch otherwise, late and in Karpenter's logs. */}}
+{{- if gt (mul 4 (int $lib.libThroughput)) (int $lib.libIops) }}
+{{- fail (printf "pool.volumes.libThroughput %d MiB/s exceeds 0.25 MiB/s per IOPS at pool.volumes.libIops %d (gp3)" (int $lib.libThroughput) (int $lib.libIops)) }}
+{{- end }}
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
 kind: KarpenterMachinePool
 metadata:
@@ -22,7 +27,9 @@ spec:
       ebs:
         deleteOnTermination: true
         encrypted: true
-        volumeSize: {{ .Values.pool.volumes.lib }}
+        iops: {{ $lib.libIops }}
+        throughput: {{ $lib.libThroughput }}
+        volumeSize: {{ $lib.lib }}
         volumeType: gp3
     - deviceName: /dev/xvde
       ebs:

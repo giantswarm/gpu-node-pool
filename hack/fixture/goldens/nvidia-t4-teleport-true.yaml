@@ -34,6 +34,8 @@ spec:
       ebs:
         deleteOnTermination: true
         encrypted: true
+        iops: 4000
+        throughput: 500
         volumeSize: 200Gi
         volumeType: gp3
     - deviceName: /dev/xvde

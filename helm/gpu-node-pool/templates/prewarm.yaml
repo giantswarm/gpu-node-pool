@@ -1,0 +1,85 @@
+{{- if .Values.pool.prewarm.enabled }}
+{{- /*
+The placeholder runs where the release lives. The Job is created in the release
+namespace on the management cluster; the pool's nodes join cluster.name. The two
+are one cluster only for the installation's own pool.
+*/}}
+{{- if ne .Values.cluster.name .Values.cluster.managementCluster }}
+{{- fail (printf "pool.prewarm needs the release on the cluster the pool joins: cluster.name %q is not the management cluster %q" .Values.cluster.name .Values.cluster.managementCluster) }}
+{{- end }}
+{{- $poolName := include "gpu-node-pool.poolName" . }}
+{{- $hold := int .Values.pool.prewarm.holdMinutes }}
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {{ $poolName }}-prewarm
+  labels:
+    {{- include "gpu-node-pool.poolLabels" . | nindent 4 }}
+value: -1000
+globalDefault: false
+preemptionPolicy: Never
+description: Placeholder holding one GPU of pool {{ $poolName }} until the first workload preempts it.
+{{- /*
+One shot, on install only: an upgrade never re-creates the Job, and the
+annotation keeps a Flux drift correction from bringing it back once its TTL
+has removed it. backoffLimit 0 with restartPolicy Never: a preempted pod is
+not replaced, so the placeholder never launches a second node.
+*/}}
+{{- if .Release.IsInstall }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $poolName }}-prewarm
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gpu-node-pool.poolLabels" . | nindent 4 }}
+  annotations:
+    helm.toolkit.fluxcd.io/driftDetection: disabled
+spec:
+  backoffLimit: 0
+  {{- /* The hold plus ten minutes for the node launch: ends a placeholder whose node never came. */}}
+  activeDeadlineSeconds: {{ add (mul $hold 60) 600 }}
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "labels.selector" . | nindent 8 }}
+        giantswarm.io/machine-pool: {{ $poolName | quote }}
+    spec:
+      priorityClassName: {{ $poolName }}-prewarm
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 0
+      automountServiceAccountToken: false
+      nodeSelector:
+        giantswarm.io/machine-pool: {{ $poolName }}
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: hold
+        image: {{ .Values.pool.prewarm.image }}
+        command: ["sleep", {{ printf "%dm" $hold | quote }}]
+        resources:
+          limits:
+            cpu: 10m
+            memory: 16Mi
+            nvidia.com/gpu: "1"
+          requests:
+            cpu: 10m
+            memory: 16Mi
+            nvidia.com/gpu: "1"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+{{- end }}
+{{- end }}

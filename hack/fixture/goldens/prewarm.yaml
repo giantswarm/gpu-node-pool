@@ -1,0 +1,92 @@
+---
+# Source: gpu-node-pool/templates/prewarm.yaml
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: test-wc-gpu00-prewarm
+  labels:
+    app: "gpu-node-pool"
+    app.kubernetes.io/name: "gpu-node-pool"
+    app.kubernetes.io/instance: "test-wc-gpu00"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/version: "0.0.1"
+    application.giantswarm.io/team: "bumblebee"
+    helm.sh/chart: "gpu-node-pool-0.0.0-dev"
+    cluster.x-k8s.io/cluster-name: "test-wc"
+    cluster.x-k8s.io/watch-filter: capi
+    giantswarm.io/cluster: "test-wc"
+    giantswarm.io/machine-pool: "test-wc-gpu00"
+    giantswarm.io/organization: "giantswarm"
+value: -1000
+globalDefault: false
+preemptionPolicy: Never
+description: Placeholder holding one GPU of pool test-wc-gpu00 until the first workload preempts it.
+
+
+---
+# Source: gpu-node-pool/templates/prewarm.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-wc-gpu00-prewarm
+  namespace: org-giantswarm
+  labels:
+    app: "gpu-node-pool"
+    app.kubernetes.io/name: "gpu-node-pool"
+    app.kubernetes.io/instance: "test-wc-gpu00"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/version: "0.0.1"
+    application.giantswarm.io/team: "bumblebee"
+    helm.sh/chart: "gpu-node-pool-0.0.0-dev"
+    cluster.x-k8s.io/cluster-name: "test-wc"
+    cluster.x-k8s.io/watch-filter: capi
+    giantswarm.io/cluster: "test-wc"
+    giantswarm.io/machine-pool: "test-wc-gpu00"
+    giantswarm.io/organization: "giantswarm"
+  annotations:
+    helm.toolkit.fluxcd.io/driftDetection: disabled
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1500
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: "gpu-node-pool"
+        app.kubernetes.io/instance: "test-wc-gpu00"
+        giantswarm.io/machine-pool: "test-wc-gpu00"
+    spec:
+      priorityClassName: test-wc-gpu00-prewarm
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 0
+      automountServiceAccountToken: false
+      nodeSelector:
+        giantswarm.io/machine-pool: test-wc-gpu00
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: hold
+        image: gsoci.azurecr.io/giantswarm/alpine:3.22.1
+        command: ["sleep", "15m"]
+        resources:
+          limits:
+            cpu: 10m
+            memory: 16Mi
+            nvidia.com/gpu: "1"
+          requests:
+            cpu: 10m
+            memory: 16Mi
+            nvidia.com/gpu: "1"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
