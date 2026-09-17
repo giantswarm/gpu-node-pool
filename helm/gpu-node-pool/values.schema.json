@@ -179,6 +179,26 @@
                     "description": "Name of the node pool within the cluster; five to twenty characters.",
                     "pattern": "^(|[a-z0-9][-a-z0-9]{3,18}[a-z0-9])$"
                 },
+                "prewarm": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Launch the pool's first node at install: a one-shot Job holds one GPU at negative priority until the first workload preempts it. Only for the installation's own pool, where the release namespace is on the cluster the nodes join."
+                        },
+                        "holdMinutes": {
+                            "type": "integer",
+                            "description": "Minutes the placeholder holds the node when no workload comes; then it ends and Karpenter consolidates the empty node.",
+                            "maximum": 1440,
+                            "minimum": 1
+                        },
+                        "image": {
+                            "type": "string",
+                            "description": "Image of the placeholder; anything with `sleep`."
+                        }
+                    }
+                },
                 "sizes": {
                     "type": "array",
                     "description": "Instance sizes Karpenter may pick within the accelerator's family, smallest first.",
@@ -194,6 +214,18 @@
                         "lib": {
                             "type": "string",
                             "description": "`/var/lib` volume (container images, kubelet)."
+                        },
+                        "libIops": {
+                            "type": "integer",
+                            "description": "Provisioned IOPS of the `/var/lib` volume. gp3 allows 3000 to 16000.",
+                            "maximum": 16000,
+                            "minimum": 3000
+                        },
+                        "libThroughput": {
+                            "type": "integer",
+                            "description": "Provisioned throughput of the `/var/lib` volume in MiB/s; image pulls on a fresh node are bounded by it. gp3 allows 125 to 1000 and at most 0.25 MiB/s per provisioned IOPS.",
+                            "maximum": 1000,
+                            "minimum": 125
                         },
                         "log": {
                             "type": "string",

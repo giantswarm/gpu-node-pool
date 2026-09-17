@@ -11,8 +11,9 @@
 
 ## What the chart renders
 
-For an existing Cluster API cluster named in its values the chart renders exactly three objects
-in the release's namespace (`org-<organization>`) and no Secret of its own:
+For an existing Cluster API cluster named in its values the chart renders three objects in the
+release's namespace (`org-<organization>`) and no Secret of its own — with `pool.prewarm.enabled`
+also the [prewarm](#prewarming-the-first-node) PriorityClass and Job:
 
 - a **`MachinePool`** `<cluster>-<pool>` with `version` the pool's own Kubernetes version,
 - a **`KubeadmConfig`** `<cluster>-<pool>-<hash>` carrying the worker bootstrap of a CAPA Flatcar
@@ -34,6 +35,8 @@ Nothing references an object the cluster's release renames on upgrade.
 | `pool.name` | `^[a-z0-9][-a-z0-9]{3,18}[a-z0-9]$` — five to twenty characters, `gpu00` or `gpu-l4`, not `gpu`; `<cluster>-<pool>` becomes the NodePool, EC2NodeClass and S3 key | the person |
 | `pool.accelerator`, `pool.sizes` | one of the curated list (`nvidia-l4` → `g6`, `nvidia-a10g` → `g5`, `nvidia-t4` → `g4dn`, `nvidia-l40s` → `g6e`) and the instance sizes Karpenter may pick | the person |
 | `pool.minSize`, `pool.maxSize` | `0` — Karpenter scales the pool to zero — and the Karpenter `limits` bounding it (`nvidia.com/gpu`, `cpu`, `memory`) | the person |
+| `pool.volumes.root`, `pool.volumes.lib`, `pool.volumes.log`, `pool.volumes.libThroughput`, `pool.volumes.libIops` | the node's gp3 volumes and the [provisioned performance of the lib volume](#the-lib-volume) | the person; the defaults fit a serving node |
+| `pool.prewarm` | [launch the first node at install](#prewarming-the-first-node) with a preemptible placeholder Job; the installation's own pool only | the person, through cluster-manager |
 | `pool.kubernetesVersion`, `pool.machineImage` | the pool's own pins | cluster-manager, from the cluster's Release CR at creation |
 | `teleport.enabled` | join the nodes to Teleport | cluster-manager, from the presence of `<cluster>-teleport-join-token` |
 | `cluster.baseDomain`, `cluster.managementCluster`, `cluster.containerRegistry`, `cluster.registryMirrors`, `cluster.proxy`, `cluster.cilium.ipamMode`, `cluster.kubelet.maxPods` | the snapshot of the cluster's settings the bootstrap needs | cluster-manager, from the cluster's values and `AWSCluster` at creation; refreshed by a re-run |
@@ -73,6 +76,39 @@ workloads requesting `nvidia.com/gpu` get theirs through the device plugin's CDI
 injects natively. A node is a GPU node once `nvidia.com/gpu` is allocatable and the ClusterPolicy is
 `ready`; no step on the node is left to a person.
 
+## Prewarming the first node
+
+A pool scales from zero: its first node launches when the first workload goes Pending — after
+the serving stack that loads a model is ready — and a fresh node needs minutes to become a GPU
+node. With `pool.prewarm.enabled` the chart launches that node at install. A one-shot **Job**
+`<cluster>-<pool>-prewarm` in the release's namespace runs a pod that requests one `nvidia.com/gpu`,
+tolerates the pool's taint, selects the pool's nodes (`giantswarm.io/machine-pool`) and sleeps
+`pool.prewarm.holdMinutes`, under a **PriorityClass** `<cluster>-<pool>-prewarm` of value -1000
+with `preemptionPolicy: Never`. Karpenter launches the node for the placeholder; the first
+workload (priority 0) preempts the placeholder and takes its GPU.
+
+The placeholder never launches a second node. The Job has `restartPolicy: Never` and
+`backoffLimit: 0`, so a preempted pod is not replaced; its `activeDeadlineSeconds` — the hold
+plus ten minutes for the node launch — ends a placeholder whose node never came; a finished Job
+removes itself (`ttlSecondsAfterFinished`) and an empty node goes with `pool.consolidateAfter`.
+The Job is rendered on install only (`.Release.IsInstall`): an upgrade never re-creates it, and
+`helm.toolkit.fluxcd.io/driftDetection: disabled` keeps a Flux drift correction from bringing it
+back. When no workload comes the prewarm costs one on-demand GPU instance for the hold.
+
+The Job is created where the release lives, on the management cluster; the pool's nodes join
+`cluster.name`. Both are one cluster only for the installation's own pool, so the chart refuses
+`pool.prewarm.enabled` where `cluster.name` is not `cluster.managementCluster`.
+
+## The lib volume
+
+`/var/lib` (`/dev/xvdd`: container images and kubelet) is a gp3 volume whose provisioned
+performance bounds the image pulls on a fresh node, and a serving runtime image is several
+gigabytes. `pool.volumes.libThroughput` (MiB/s, default 500) and `pool.volumes.libIops` (default
+4000) set the volume's `ebs.throughput` and `ebs.iops`. gp3 allows 125 to 1000 MiB/s and 3000
+to 16000 IOPS with at most 0.25 MiB/s per provisioned IOPS; the chart refuses a pair beyond that
+ratio, which EC2 would refuse at launch. The root and log volumes stay at gp3's baseline
+(125 MiB/s, 3000 IOPS).
+
 ## The skew rule
 
 The pool pins its own Kubernetes version and machine image. A cluster upgrade never touches
@@ -98,11 +134,15 @@ served model; bumps are meant to be explicit.
 ## Guarding the bootstrap
 
 `make verify` renders the fixture cluster (`ci/ci-values.yaml`, which `ct lint` uses as well) for every accelerator with and without
-teleport, compares the goldens, and diffs the bootstrap — as the node sees it, files resolved —
-against the newest released cluster-aws, pinned in `hack/oracle/Chart.yaml` and bumped by
-Renovate. The intentional differences are the one list in `hack/oracle/whitelist.yaml`; any other
-difference fails CI, so a cluster-aws bump that changes the worker bootstrap fails until the chart
-follows. `make goldens` rewrites the goldens.
+teleport, compares the goldens, validates every `KarpenterMachinePool` against the CRD served by
+the pinned aws-resolver-rules-operator (fields, types, patterns and enums — not its CEL rules),
+renders the prewarm pair into its own golden, checks the chart's refusals (prewarm off the
+management cluster, a lib volume beyond gp3's throughput-per-IOPS ratio), and diffs the
+bootstrap — as the node sees it, files resolved — against the newest released cluster-aws. Both
+oracles are pinned in `hack/oracle/Chart.yaml` and bumped by Renovate. The intentional
+differences are the one list in `hack/oracle/whitelist.yaml`; any other difference fails CI, so a
+cluster-aws bump that changes the worker bootstrap fails until the chart follows. `make goldens`
+rewrites the goldens.
 
 {{ template "chart.requirementsSection" . }}
 

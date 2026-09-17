@@ -76,8 +76,26 @@ pool:
     root: 15Gi
     # -- `/var/lib` volume (container images, kubelet).
     lib: 200Gi
+    # @schema minimum:125;maximum:1000
+    # -- Provisioned throughput of the `/var/lib` volume in MiB/s; image pulls on a fresh node
+    # are bounded by it. gp3 allows 125 to 1000 and at most 0.25 MiB/s per provisioned IOPS.
+    libThroughput: 500
+    # @schema minimum:3000;maximum:16000
+    # -- Provisioned IOPS of the `/var/lib` volume. gp3 allows 3000 to 16000.
+    libIops: 4000
     # -- `/var/log` volume.
     log: 30Gi
+  prewarm:
+    # -- Launch the pool's first node at install: a one-shot Job holds one GPU at negative
+    # priority until the first workload preempts it. Only for the installation's own pool,
+    # where the release namespace is on the cluster the nodes join.
+    enabled: false
+    # @schema minimum:1;maximum:1440
+    # -- Minutes the placeholder holds the node when no workload comes; then it ends and
+    # Karpenter consolidates the empty node.
+    holdMinutes: 15
+    # -- Image of the placeholder; anything with `sleep`.
+    image: gsoci.azurecr.io/giantswarm/alpine:3.22.1
 
 teleport:
   # -- Join the nodes to Teleport with the cluster's `<cluster>-teleport-join-token` Secret; off where the cluster has none.
