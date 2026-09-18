@@ -5,7 +5,8 @@ Job holding one GPU of the pool under the PriorityClass of that name -- every ob
 in the release namespace and nothing cluster-scoped (a pool release is delivered as
 the organisation's tenant account, whose rights end at the namespace), no Secret, no
 accelerator label, KubeadmConfig.discovery left to CABPK, the lib volume with
-provisioned throughput and IOPS within gp3's ratio."""
+provisioned throughput and IOPS within gp3's ratio, and the NodePool template requiring
+exactly the zones of `--zones` (none without it)."""
 import argparse
 
 import yaml
@@ -13,6 +14,7 @@ import yaml
 args = argparse.ArgumentParser(description=__doc__)
 args.add_argument("--namespace", required=True, help="the release namespace every object must be in")
 args.add_argument("--prewarm", metavar="CLASS", help="expect the prewarm Job under this PriorityClass")
+args.add_argument("--zones", metavar="ZONE[,ZONE]", help="expect the NodePool template to require these zones; without it, no zone requirement")
 opts = args.parse_args()
 
 docs = [d for d in yaml.safe_load_all(__import__("sys").stdin) if d]
@@ -34,6 +36,12 @@ pool = kmp["metadata"]["name"]
 lib = next(m["ebs"] for m in kmp["spec"]["ec2NodeClass"]["blockDeviceMappings"] if m["deviceName"] == "/dev/xvdd")
 assert isinstance(lib["throughput"], int) and isinstance(lib["iops"], int), lib
 assert lib["throughput"] * 4 <= lib["iops"], f"gp3 allows 0.25 MiB/s per IOPS: {lib}"
+requirements = {r["key"]: r for r in kmp["spec"]["nodePool"]["template"]["spec"]["requirements"]}
+zone = requirements.get("topology.kubernetes.io/zone")
+if opts.zones:
+    assert zone == {"key": "topology.kubernetes.io/zone", "operator": "In", "values": opts.zones.split(",")}, zone
+else:
+    assert zone is None, f"an empty pool.zones renders no zone requirement: {zone}"
 
 if opts.prewarm:
     job = by_kind["Job"]

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # make verify: goldens per accelerator with and without teleport, the render's
 # shape, the KarpenterMachinePool against the CRD the installation serves, the
-# prewarm Job and the chart's refusals, and the bootstrap diff against the
-# pinned cluster-aws (hack/oracle). `hack/verify.sh update` rewrites the goldens.
+# prewarm Job, the zone pin, the chart's refusals, and the bootstrap diff against
+# the pinned cluster-aws (hack/oracle). `hack/verify.sh update` rewrites the goldens.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -87,6 +87,16 @@ compare "$fixture/goldens/prewarm.yaml" "$work/prewarm.yaml"
 refused "pool.prewarm needs the release on the cluster the pool joins" --set pool.prewarm.enabled=true
 refused "pool.prewarm.priorityClassName names the PriorityClass" "${prewarm[@]}" --set pool.prewarm.priorityClassName=
 refused "exceeds 0.25 MiB/s per IOPS" --set pool.volumes.libThroughput=1000 --set pool.volumes.libIops=3000
+
+# pool.zones pins every node of the pool to the named zones: a
+# topology.kubernetes.io/zone requirement on the NodePool template. The default
+# goldens above hold that an empty list renders none.
+zones=(--set 'pool.zones={eu-central-1b}')
+render "${zones[@]}" > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --zones eu-central-1b < "$work/render.yaml"
+python3 hack/check_crd.py "$crd" < "$work/render.yaml"
+printf '%s\n' "$(render "${zones[@]}" --show-only templates/karpentermachinepool.yaml)" > "$work/zones.yaml"
+compare "$fixture/goldens/zones.yaml" "$work/zones.yaml"
 
 helm template test-wc "$(oracle cluster-aws)" -n "$namespace" -f hack/oracle/values.yaml > "$work/oracle.yaml"
 render > "$work/ours.yaml"
