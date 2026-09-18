@@ -5,9 +5,15 @@ Job holding one GPU of the pool under the PriorityClass of that name -- every ob
 in the release namespace and nothing cluster-scoped (a pool release is delivered as
 the organisation's tenant account, whose rights end at the namespace), no Secret, no
 accelerator label, KubeadmConfig.discovery left to CABPK, the lib volume with
-provisioned throughput and IOPS within gp3's ratio, and the NodePool template requiring
-exactly the zones of `--zones` (none without it)."""
+provisioned throughput and IOPS within gp3's ratio, the NodePool template requiring
+exactly the zones of `--zones` (none without it), and the bootstrap of the driver source
+named by `--nvidia-driver`: with flatcar-sysext the enabled-sysext line, nvidia.service
+masked, the CDI unit ordered after the extension and -- with `--sysext-url` -- Ignition
+downloading the extension image from that URL into the path the OS activates it from;
+with image-build the build at boot and the CDI unit waiting for it."""
 import argparse
+import base64
+import re
 
 import yaml
 
@@ -15,6 +21,8 @@ args = argparse.ArgumentParser(description=__doc__)
 args.add_argument("--namespace", required=True, help="the release namespace every object must be in")
 args.add_argument("--prewarm", metavar="CLASS", help="expect the prewarm Job under this PriorityClass")
 args.add_argument("--zones", metavar="ZONE[,ZONE]", help="expect the NodePool template to require these zones; without it, no zone requirement")
+args.add_argument("--nvidia-driver", choices=["flatcar-sysext", "image-build"], help="expect the bootstrap of this driver source")
+args.add_argument("--sysext-url", metavar="URL", help="with flatcar-sysext, expect Ignition to download the extension image from this URL; without it, no download")
 opts = args.parse_args()
 
 docs = [d for d in yaml.safe_load_all(__import__("sys").stdin) if d]
@@ -42,6 +50,29 @@ if opts.zones:
     assert zone == {"key": "topology.kubernetes.io/zone", "operator": "In", "values": opts.zones.split(",")}, zone
 else:
     assert zone is None, f"an empty pool.zones renders no zone requirement: {zone}"
+
+if opts.nvidia_driver:
+    files = {f["path"]: base64.b64decode(f["content"]).decode() for f in kc["spec"]["files"] if f.get("encoding") == "base64"}
+    ignition = yaml.safe_load(kc["spec"]["ignition"]["containerLinuxConfig"]["additionalConfig"])
+    units = {u["name"]: u for u in ignition["systemd"]["units"]}
+    downloads = ignition.get("storage", {}).get("files", [])
+    cdi = files["/etc/systemd/system/nvidia-cdi-spec.service"]
+    if opts.nvidia_driver == "flatcar-sysext":
+        name = files["/etc/flatcar/enabled-sysext.conf"].rstrip("\n")
+        assert re.fullmatch(r"nvidia-drivers-[0-9]{3}(-open)?", name), files["/etc/flatcar/enabled-sysext.conf"]
+        assert units["nvidia.service"] == {"name": "nvidia.service", "enabled": False, "mask": True}, units.get("nvidia.service")
+        assert "Requires=nvidia.service" not in cdi and "After=nvidia.service" not in cdi and "After=systemd-sysext.service" in cdi, cdi
+        for step in ("modprobe -a nvidia nvidia_uvm nvidia_modeset", "create-device-nodes --control-devices", "nvidia-smi -L", "nvidia-container-runtime.mode=cdi", "cdi generate"):
+            assert step in cdi, (step, cdi)
+        if opts.sysext_url:
+            (download,) = downloads
+            assert re.fullmatch(rf"/etc/flatcar/sysext/flatcar-{name}-[0-9]+\.[0-9]+\.[0-9]+\.raw", download["path"]), download
+            assert download["contents"]["remote"]["url"] == opts.sysext_url and download["mode"] == 0o644, download
+        else:
+            assert not downloads, downloads
+    else:
+        assert "/etc/flatcar/enabled-sysext.conf" not in files and "nvidia.service" not in units and not downloads, (units.keys(), downloads)
+        assert "Requires=nvidia.service" in cdi and "After=nvidia.service" in cdi, cdi
 
 if opts.prewarm:
     job = by_kind["Job"]

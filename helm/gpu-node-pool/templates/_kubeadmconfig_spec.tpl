@@ -28,7 +28,11 @@ files:
 {{- end }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/opt/bin/kubelet-aws-config.sh" "permissions" "0755") }}
 {{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/system/kubelet-aws-config.service" "permissions" "0644") }}
-{{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/system/nvidia-cdi-spec.service" "permissions" "0644") }}
+{{- if eq .Values.pool.nvidiaDriver.source "flatcar-sysext" }}
+{{- $_ := include "gpu-node-pool.flatcarVersion" . }}
+{{ include "gpu-node-pool.file" (dict "path" "/etc/flatcar/enabled-sysext.conf" "permissions" "0644" "content" (printf "%s\n" (include "gpu-node-pool.nvidiaSysext" .))) }}
+{{- end }}
+{{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/system/nvidia-cdi-spec.service" "src" (printf "/etc/systemd/system/nvidia-cdi-spec.service.%s" .Values.pool.nvidiaDriver.source) "permissions" "0644") }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/etc/systemd/network/99-unmanaged-devices.network" "src" (printf "/etc/systemd/network/99-unmanaged-devices.network.%s" .Values.cluster.cilium.ipamMode) "permissions" "0644") }}
 {{- if .Values.cluster.proxy.enabled }}
 {{- range $unit := list "containerd" "kubelet" "teleport" }}

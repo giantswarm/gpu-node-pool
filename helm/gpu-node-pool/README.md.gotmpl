@@ -40,6 +40,7 @@ Nothing references an object the cluster's release renames on upgrade.
 | `pool.zones` | the availability zones the nodes launch in, [pinning the pool](#pinning-the-pool-to-zones) to a zonal volume it serves; empty for any zone of the cluster's node subnets | the person; cluster-manager, from the installation's kept model cache claim |
 | `pool.minSize`, `pool.maxSize` | `0` — Karpenter scales the pool to zero — and the Karpenter `limits` bounding it (`nvidia.com/gpu`, `cpu`, `memory`) | the person |
 | `pool.volumes.root`, `pool.volumes.lib`, `pool.volumes.log`, `pool.volumes.libThroughput`, `pool.volumes.libIops` | the node's gp3 volumes and the [provisioned performance of the lib volume](#the-lib-volume) | the person; the defaults fit a serving node |
+| `pool.nvidiaDriver` | the source of the node's NVIDIA driver — Flatcar's prebuilt, release-matched extension by default, or the build at boot — its branch and a mirror for the extension image ([the image contract](#the-image-contract-what-the-image-provides-what-the-pool-configures)) | the person; the defaults fit every image since Flatcar 4344.0.0 |
 | `pool.prewarm` | [launch the first node at install](#prewarming-the-first-node) with a preemptible placeholder Job under the platform's PriorityClass (`pool.prewarm.priorityClassName`); the installation's own pool only | the person, through cluster-manager |
 | `pool.kubernetesVersion`, `pool.machineImage` | the pool's own pins | cluster-manager, from the cluster's Release CR at creation |
 | `teleport.enabled` | join the nodes to Teleport | cluster-manager, from the presence of `<cluster>-teleport-join-token` |
@@ -54,24 +55,47 @@ as ordinary values from either source.
 The nodes run the Giant Swarm Flatcar image (`flatcar-<channel>-<flatcar>-kube-<k8s>-tooling-<tooling>-gs`,
 built by capi-image-builder). For GPUs it provides:
 
-- the **NVIDIA driver**: Flatcar's `nvidia.service` (`setup-nvidia`) builds the driver for the running
-  kernel at boot and merges it into `/usr` as a system extension — kernel modules, `libcuda.so`,
-  `libnvidia-ml.so` and friends under `/usr/lib64`, `nvidia-smi` and the other driver binaries under
-  `/opt/bin` with symlinks in `/usr/bin`;
 - the **NVIDIA container toolkit** as the `nvidia-runtime` system extension: `nvidia-container-runtime`,
   `nvidia-ctk`, `nvidia-cdi-hook` in `/usr/bin`, its configuration in `/etc/nvidia-container-runtime/config.toml`
   (`mode = "auto"`), its `nvidia-cdi-refresh` units present but not enabled;
 - **containerd** with the `nvidia` runtime handler (`BinaryName /usr/bin/nvidia-container-runtime`, `runc`
-  stays the default) and CDI on (`enable_cdi`, spec dirs `/etc/cdi` and `/var/run/cdi`).
+  stays the default) and CDI on (`enable_cdi`, spec dirs `/etc/cdi` and `/var/run/cdi`);
+- Flatcar's legacy **`nvidia.service`** (`setup-nvidia`), which builds the driver for the running kernel at
+  first boot — kept by Flatcar for backwards compatibility, used by the pool only with
+  `pool.nvidiaDriver.source: image-build`.
 
-The pool's bootstrap adds one unit, `nvidia-cdi-spec.service`, ordered after `nvidia.service`: it sets the
-runtime to `mode = "cdi"` and writes the CDI specification of the driver to `/var/run/cdi/nvidia.yaml`
-(`nvidia-ctk cdi generate`) with `/usr/bin` ahead of `/opt/bin` on its PATH. In `auto` mode the runtime
-generates that specification per container instead, locating the driver's binaries through containerd's
-PATH, which puts `/opt/bin` first on this image; `nvidia-smi` then lands at `/opt/bin/nvidia-smi` inside
-the container, off every container's PATH, and the GPU operator's toolkit validation
-(`nvidia-smi` under RuntimeClass `nvidia`) never passes. With the specification written once, the
-runtime injects exactly what it says, `nvidia-smi` at `/usr/bin/nvidia-smi` included.
+The **NVIDIA driver** comes with the pool (`pool.nvidiaDriver`). By default (`source: flatcar-sysext`) it is
+the prebuilt, release-matched `flatcar-nvidia-drivers-<branch>` system extension Flatcar ships next to every
+image since 4344.0.0: the kernel modules for the release's kernel, `libcuda.so`, `libnvidia-ml.so` and friends
+under `/usr/lib64`, `nvidia-smi` and the other driver binaries under `/usr/bin`. The bootstrap writes
+`nvidia-drivers-<branch>` to `/etc/flatcar/enabled-sysext.conf`; at first boot, right after Ignition, the OS
+downloads the extension image for its own version from Flatcar's release server (about 400 MB, verified with
+the release key), keeps it under `/etc/flatcar/sysext/` and merges it into `/usr` before the system starts, so
+the driver is in place when containerd and kubelet start and the node registers like any other node.
+`nvidia.service` is masked. `update-engine` is masked on the nodes, so nothing updates the extension later; a
+node is replaced, not updated.
+
+The pool's bootstrap adds one unit, `nvidia-cdi-spec.service`, ordered after `systemd-sysext.service` and
+`systemd-modules-load.service`: it loads the modules through the extension's modprobe helper
+(`modprobe -a nvidia nvidia_uvm nvidia_modeset`), creates the device nodes (`nvidia-ctk system
+create-device-nodes --control-devices`, then `nvidia-smi -L` for one node per GPU), sets the runtime to
+`mode = "cdi"` and writes the CDI specification of the driver to `/var/run/cdi/nvidia.yaml`
+(`nvidia-ctk cdi generate`). In `auto` mode the runtime would generate that specification per container,
+locating the driver through containerd's PATH; with the specification written once, the runtime injects
+exactly what it says. (With the driver built at boot, whose binaries land under `/opt/bin`, that
+per-container discovery mounted `nvidia-smi` off every container's PATH and the GPU operator's toolkit
+validation never passed — the reason the pool sets `mode = "cdi"` for both sources.)
+
+`pool.nvidiaDriver.branch` picks the branch (`570` by default; `535` and `550` as Flatcar ships them) — the
+CUDA runtime image decides which branches it accepts. `pool.nvidiaDriver.baseURL` names a directory holding
+the release's `flatcar-nvidia-drivers-<branch>.raw` for a network the Flatcar release server is not reachable
+from: Ignition downloads the image from there into `/etc/flatcar/sysext/flatcar-nvidia-drivers-<branch>-<flatcar>.raw`,
+the path the OS looks at first, and the OS activates it without downloading. The download path and the guard
+read the Flatcar version from `pool.machineImage`: an image older than 4344.0.0 has no extension on the
+release server and the OS would fail the boot looking for it, so the chart refuses the render — as it refuses
+an image whose name carries no Flatcar version. `source: image-build` is the choice for such an image and
+renders the bootstrap without the extension: `nvidia.service` builds the driver at first boot (minutes per
+node, with containerd and kubelet coming back after it) and the CDI unit waits for it.
 
 The GPU operator runs on the `flatcar` row of cluster-manager's table: `driver.enabled=false`,
 `toolkit.enabled=false`, operands under RuntimeClass `nvidia`, `cdi.enabled=true`. Its operands get every
@@ -170,9 +194,12 @@ the pinned aws-resolver-rules-operator (fields, types, patterns and enums — no
 holds every object of a render to the release namespace (nothing cluster-scoped), renders the
 prewarm Job into its own golden — under the default class and under a named one — renders the
 `KarpenterMachinePool` of a zone-pinned pool into its own golden (the default goldens hold that
-an empty `pool.zones` renders no zone requirement), checks the chart's refusals (prewarm off the
+an empty `pool.zones` renders no zone requirement), renders the `KubeadmConfig` of
+`pool.nvidiaDriver.source: image-build` and of a mirror (`pool.nvidiaDriver.baseURL`) into goldens of their
+own (the default goldens hold the extension's bootstrap), checks the chart's refusals (prewarm off the
 management cluster, an empty `pool.prewarm.priorityClassName`, a lib volume beyond gp3's
-throughput-per-IOPS ratio), and diffs the bootstrap — as the node sees it, files resolved —
+throughput-per-IOPS ratio, the extension on an image older than Flatcar 4344.0.0 or without a Flatcar
+version in its name), and diffs the bootstrap — as the node sees it, files resolved —
 against the newest released cluster-aws. Both
 oracles are pinned in `hack/oracle/Chart.yaml` and bumped by Renovate. The intentional
 differences are the one list in `hack/oracle/whitelist.yaml`; any other difference fails CI, so a

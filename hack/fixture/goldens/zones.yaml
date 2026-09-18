@@ -21,7 +21,7 @@ metadata:
 spec:
   ec2NodeClass:
     amiSelectorTerms:
-    - name: flatcar-stable-4230.2.1-kube-1.33.1-tooling-1.27.0-gs
+    - name: flatcar-stable-4593.2.5-kube-1.33.1-tooling-1.27.0-gs
       owner: "706635527432"
     blockDeviceMappings:
     - deviceName: /dev/xvda

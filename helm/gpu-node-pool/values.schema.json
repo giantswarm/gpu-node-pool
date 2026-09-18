@@ -179,6 +179,29 @@
                     "description": "Name of the node pool within the cluster; five to twenty characters.",
                     "pattern": "^(|[a-z0-9][-a-z0-9]{3,18}[a-z0-9])$"
                 },
+                "nvidiaDriver": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "baseURL": {
+                            "type": "string",
+                            "description": "Directory holding the release's `flatcar-nvidia-drivers-<branch>.raw` for a network the Flatcar release server is not reachable from: Ignition downloads the image from there at first boot and the OS activates it without downloading. Empty: the OS fetches it from Flatcar's release server for its own version."
+                        },
+                        "branch": {
+                            "type": "string",
+                            "description": "Driver branch of the extension (`535`, `550`, `570`), as Flatcar names it; the proprietary variant.",
+                            "pattern": "^[0-9]{3}(-open)?$"
+                        },
+                        "source": {
+                            "type": "string",
+                            "description": "Where the node's NVIDIA driver comes from. `flatcar-sysext`: the prebuilt, release-matched `flatcar-nvidia-drivers-<branch>` system extension Flatcar ships next to the image (Flatcar 4344.0.0 and newer; an older image is refused), fetched and verified by the OS at first boot, so the node registers like any other node. `image-build`: Flatcar's `nvidia.service` builds the driver for the running kernel at each node's first boot, minutes per node.",
+                            "enum": [
+                                "flatcar-sysext",
+                                "image-build"
+                            ]
+                        }
+                    }
+                },
                 "prewarm": {
                     "type": "object",
                     "additionalProperties": false,
