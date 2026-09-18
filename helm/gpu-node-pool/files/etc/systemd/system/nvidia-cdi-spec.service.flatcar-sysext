@@ -1,0 +1,34 @@
+[Unit]
+Description=NVIDIA CDI specification of the node's driver for the container runtime
+Documentation=https://github.com/giantswarm/gpu-node-pool
+# The driver is Flatcar's prebuilt nvidia-drivers system extension, named in
+# /etc/flatcar/enabled-sysext.conf: the OS downloads it at first boot and merges
+# it into /usr before the system starts; the service that built the driver at
+# boot is masked. The extension ships the modules, libraries and binaries and
+# nothing that loads or creates: this unit loads the modules, creates the device
+# nodes and writes the specification describing them.
+After=systemd-sysext.service ensure-sysext.service systemd-modules-load.service
+ConditionPathExists=/usr/bin/nvidia-ctk
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The extension installs the driver's binaries in /usr/bin and its libraries in
+# /usr/lib64, where the specification and every container's PATH find them.
+Environment=PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/bin:/sbin
+# modprobe goes through the extension's helper (/usr/lib/modprobe.d/10-*-kmod-sysext.conf):
+# an overlay of the extension's modules on /usr/lib/modules of the running kernel, depmod, insmod.
+ExecStartPre=/usr/bin/modprobe -a nvidia nvidia_uvm nvidia_modeset
+# The control device nodes (/dev/nvidiactl, nvidia-modeset, nvidia-uvm, nvidia-uvm-tools),
+# then one node per GPU through the driver: the specification lists the nodes that exist.
+ExecStartPre=/usr/bin/nvidia-ctk system create-device-nodes --control-devices
+ExecStartPre=/usr/bin/nvidia-smi -L
+# The nvidia runtime injects what the specification says (mode cdi) instead of
+# discovering the driver per container through containerd's PATH (mode auto).
+ExecStartPre=/usr/bin/nvidia-ctk config --in-place --set nvidia-container-runtime.mode=cdi
+ExecStart=/usr/bin/nvidia-ctk cdi generate --output=/var/run/cdi/nvidia.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

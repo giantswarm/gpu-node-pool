@@ -65,7 +65,7 @@ crd=$(oracle aws-resolver-rules-operator)/templates/infrastructure.cluster.x-k8s
 for accelerator in nvidia-l4 nvidia-a10g nvidia-t4 nvidia-l40s; do
   for teleport in true false; do
     render --set "pool.accelerator=$accelerator" --set "teleport.enabled=$teleport" > "$work/render.yaml"
-    python3 hack/check_render.py --namespace "$namespace" < "$work/render.yaml"
+    python3 hack/check_render.py --namespace "$namespace" --nvidia-driver flatcar-sysext < "$work/render.yaml"
     python3 hack/check_crd.py "$crd" < "$work/render.yaml"
     compare "$fixture/goldens/$accelerator-teleport-$teleport.yaml" "$work/render.yaml"
   done
@@ -97,6 +97,26 @@ python3 hack/check_render.py --namespace "$namespace" --zones eu-central-1b < "$
 python3 hack/check_crd.py "$crd" < "$work/render.yaml"
 printf '%s\n' "$(render "${zones[@]}" --show-only templates/karpentermachinepool.yaml)" > "$work/zones.yaml"
 compare "$fixture/goldens/zones.yaml" "$work/zones.yaml"
+
+# pool.nvidiaDriver: the goldens above hold the default, Flatcar's prebuilt
+# extension (the enabled-sysext line, nvidia.service masked, the CDI unit ordered
+# after the extension). image-build is the bootstrap as it was before the
+# extension, the build at boot; a mirror moves the download of the extension image
+# to Ignition. An image older than the first release shipping the extension is
+# refused, as is one whose name carries no Flatcar version; image-build renders on any image.
+build=(--set pool.nvidiaDriver.source=image-build)
+render "${build[@]}" > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --nvidia-driver image-build < "$work/render.yaml"
+printf '%s\n' "$(render "${build[@]}" --show-only templates/kubeadmconfig.yaml)" > "$work/nvidia-driver-image-build.yaml"
+compare "$fixture/goldens/nvidia-driver-image-build.yaml" "$work/nvidia-driver-image-build.yaml"
+mirror=https://mirror.example.com/flatcar/amd64-usr/4593.2.5
+render --set "pool.nvidiaDriver.baseURL=$mirror/" > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --nvidia-driver flatcar-sysext --sysext-url "$mirror/flatcar-nvidia-drivers-570.raw" < "$work/render.yaml"
+printf '%s\n' "$(render --set "pool.nvidiaDriver.baseURL=$mirror/" --show-only templates/kubeadmconfig.yaml)" > "$work/nvidia-driver-mirror.yaml"
+compare "$fixture/goldens/nvidia-driver-mirror.yaml" "$work/nvidia-driver-mirror.yaml"
+refused "needs Flatcar 4344.0.0 or newer" --set pool.machineImage=flatcar-stable-4230.2.1-kube-1.33.1-tooling-1.27.0-gs
+refused "needs the Flatcar version of pool.machineImage" --set pool.machineImage=ubuntu-2404-kube-1.33.1-gs
+render "${build[@]}" --set pool.machineImage=ubuntu-2404-kube-1.33.1-gs > /dev/null
 
 helm template test-wc "$(oracle cluster-aws)" -n "$namespace" -f hack/oracle/values.yaml > "$work/oracle.yaml"
 render > "$work/ours.yaml"

@@ -14,4 +14,4 @@ cluster:
 pool:
   name: gpu00
   kubernetesVersion: 1.33.1
-  machineImage: flatcar-stable-4230.2.1-kube-1.33.1-tooling-1.27.0-gs
+  machineImage: flatcar-stable-4593.2.5-kube-1.33.1-tooling-1.27.0-gs

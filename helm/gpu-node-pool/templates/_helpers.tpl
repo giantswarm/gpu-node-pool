@@ -69,9 +69,31 @@ nvidia-l40s: g6e
   content: {{ .content | b64enc }}
 {{- end -}}
 
-{{/* A file of the chart, verbatim. */}}
+{{/* A file of the chart, verbatim; `src` names a variant of it. */}}
 {{- define "gpu-node-pool.staticFile" -}}
-{{- include "gpu-node-pool.file" (dict "path" .path "permissions" .permissions "content" (.ctx.Files.Get (printf "files%s" .path))) -}}
+{{- include "gpu-node-pool.file" (dict "path" .path "permissions" .permissions "content" (.ctx.Files.Get (printf "files%s" (.src | default .path)))) -}}
+{{- end -}}
+
+{{/* The name of the driver extension as Flatcar's enabled-sysext.conf takes it (`flatcar-<name>.raw` on the release server). */}}
+{{- define "gpu-node-pool.nvidiaSysext" -}}
+{{- printf "nvidia-drivers-%s" .Values.pool.nvidiaDriver.branch -}}
+{{- end -}}
+
+{{/*
+The Flatcar version of pool.machineImage (flatcar-<channel>-<version>-kube-...), for the driver extension:
+the release server ships flatcar-nvidia-drivers-* from 4344.0.0 on, and the OS fails the boot when it
+finds none for its version.
+*/}}
+{{- define "gpu-node-pool.flatcarVersion" -}}
+{{- $image := .Values.pool.machineImage -}}
+{{- if not (regexMatch "^flatcar-[a-z]+-[0-9]+\\.[0-9]+\\.[0-9]+-kube-" $image) -}}
+{{- fail (printf "pool.nvidiaDriver.source flatcar-sysext needs the Flatcar version of pool.machineImage (flatcar-<channel>-<version>-kube-...), got %q; pool.nvidiaDriver.source image-build builds the driver on any image" $image) -}}
+{{- end -}}
+{{- $version := regexReplaceAll "^flatcar-[a-z]+-([0-9]+\\.[0-9]+\\.[0-9]+)-kube-.*$" $image "${1}" -}}
+{{- if not (semverCompare ">= 4344.0.0" $version) -}}
+{{- fail (printf "pool.nvidiaDriver.source flatcar-sysext needs Flatcar 4344.0.0 or newer, the first release shipping the nvidia-drivers extension; pool.machineImage is %s. pool.nvidiaDriver.source image-build builds the driver on this image" $version) -}}
+{{- end -}}
+{{- $version -}}
 {{- end -}}
 
 {{/* A file of the chart rendered with the release's values. */}}

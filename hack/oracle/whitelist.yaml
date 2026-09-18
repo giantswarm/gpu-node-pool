@@ -18,7 +18,11 @@
 - KubeadmConfig spec.joinConfiguration.nodeRegistration.taints
 # The block the KarpenterMachinePool controller overwrites; not carried.
 - KarpenterMachinePool spec.ec2NodeClass.kubelet
-# The GPU node's container runtime: the CDI specification of the image's driver
-# and the nvidia runtime in CDI mode (nvidia-cdi-spec.service).
+# The GPU node's driver and container runtime: Flatcar's prebuilt nvidia-drivers
+# extension in place of the build at boot (enabled-sysext.conf, nvidia.service
+# masked), the CDI specification of the driver and the nvidia runtime in CDI mode
+# (nvidia-cdi-spec.service).
+- KubeadmConfig spec.files[path=/etc/flatcar/enabled-sysext.conf]
+- KubeadmConfig spec.ignition.containerLinuxConfig.additionalConfig.systemd.units[name=nvidia.service]
 - KubeadmConfig spec.files[path=/etc/systemd/system/nvidia-cdi-spec.service]
 - KubeadmConfig spec.ignition.containerLinuxConfig.additionalConfig.systemd.units[name=nvidia-cdi-spec.service]

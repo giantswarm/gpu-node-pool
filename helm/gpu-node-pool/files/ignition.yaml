@@ -70,6 +70,13 @@ systemd:
 {{- end }}
   - name: kubelet-aws-config.service
     enabled: true
+{{- if eq .Values.pool.nvidiaDriver.source "flatcar-sysext" }}
+  # The driver is Flatcar's prebuilt nvidia-drivers extension, named in
+  # /etc/flatcar/enabled-sysext.conf; the service that builds it at boot is masked.
+  - name: nvidia.service
+    enabled: false
+    mask: true
+{{- end }}
   - name: nvidia-cdi-spec.service
     enabled: true
   - name: var-lib.mount
@@ -97,6 +104,16 @@ systemd:
       [Install]
       WantedBy=local-fs-pre.target
 storage:
+{{- if and (eq .Values.pool.nvidiaDriver.source "flatcar-sysext") .Values.pool.nvidiaDriver.baseURL }}
+  files:
+  # The driver extension from the mirror, at the path the OS looks at before downloading the
+  # image for its version from Flatcar's release server; it activates it from there.
+  - path: /etc/flatcar/sysext/flatcar-{{ include "gpu-node-pool.nvidiaSysext" . }}-{{ include "gpu-node-pool.flatcarVersion" . }}.raw
+    mode: 0644
+    contents:
+      remote:
+        url: {{ printf "%s/flatcar-%s.raw" (trimSuffix "/" .Values.pool.nvidiaDriver.baseURL) (include "gpu-node-pool.nvidiaSysext" .) }}
+{{- end }}
   filesystems:
   - name: lib
     mount:
