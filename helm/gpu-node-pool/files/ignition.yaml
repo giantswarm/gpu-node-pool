@@ -49,6 +49,13 @@ systemd:
         CPUAccounting=true
         MemoryAccounting=true
         Slice=kubereserved.slice
+    # A container inherits containerd's locked-memory limit and has no
+    # CAP_IPC_LOCK, so under the unit's 8 MB default a runtime that mlock()s
+    # its weights dies at start: unlimited on a GPU node.
+    - name: 20-memlock.conf
+      contents: |
+        [Service]
+        LimitMEMLOCK=infinity
   - name: auditd.service
     enabled: false
 {{- if .Values.teleport.enabled }}

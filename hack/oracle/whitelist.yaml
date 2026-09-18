@@ -34,3 +34,7 @@
 - KubeadmConfig spec.files[path=/etc/systemd/system/format-instance-store.service]
 - KubeadmConfig spec.ignition.containerLinuxConfig.additionalConfig.systemd.units[name=format-instance-store.service]
 - KubeadmConfig spec.ignition.containerLinuxConfig.additionalConfig.storage.filesystems[name=lib]
+# The GPU node's container runtime lets a workload lock its memory: containerd's
+# locked-memory limit unlimited (a container inherits the limit and has no
+# CAP_IPC_LOCK, so a runtime that mlock()s its weights dies under the 8 MB default).
+- KubeadmConfig spec.ignition.containerLinuxConfig.additionalConfig.systemd.units[name=containerd.service].dropins[name=20-memlock.conf]
