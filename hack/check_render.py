@@ -4,7 +4,9 @@ KubeadmConfig and a KarpenterMachinePool -- with `--prewarm <class>` also the pr
 Job holding one GPU of the pool under the PriorityClass of that name -- every object
 in the release namespace and nothing cluster-scoped (a pool release is delivered as
 the organisation's tenant account, whose rights end at the namespace), no Secret, no
-accelerator label, KubeadmConfig.discovery left to CABPK, the node's lib volume as
+accelerator label, KubeadmConfig.discovery left to CABPK, containerd's locked-memory limit
+unlimited (the `memlock.conf` drop-in: a container inherits the limit and has no CAP_IPC_LOCK, so
+a runtime that mlock()s its weights dies under the 8 MB default), the node's lib volume as
 `--lib-source` names it (instance-store: the unit formatting the store, its script and
 Karpenter's instanceStorePolicy, no lib filesystem entry and no lib block device mapping;
 ebs: the lib volume on /dev/xvdd with provisioned throughput and IOPS within gp3's ratio,
@@ -42,6 +44,12 @@ assert "discovery" not in kc["spec"]["joinConfiguration"], "discovery is CABPK's
 labels = next(a["value"] for a in kc["spec"]["joinConfiguration"]["nodeRegistration"]["kubeletExtraArgs"] if a["name"] == "node-labels")
 assert "accelerator" not in labels, labels
 assert any(t["key"] == "nvidia.com/gpu" and t["effect"] == "NoSchedule" for t in kc["spec"]["joinConfiguration"]["nodeRegistration"]["taints"])
+files = {f["path"]: base64.b64decode(f["content"]).decode() for f in kc["spec"]["files"] if f.get("encoding") == "base64"}
+ignition = yaml.safe_load(kc["spec"]["ignition"]["containerLinuxConfig"]["additionalConfig"])
+units = {u["name"]: u for u in ignition["systemd"]["units"]}
+dropins = {d["name"]: d["contents"] for d in units["containerd.service"]["dropins"]}
+assert "Slice=kubereserved.slice" in dropins["10-change-cgroup.conf"], dropins
+assert "LimitMEMLOCK=infinity" in dropins["memlock.conf"], f"a GPU node's containerd lets a workload lock its memory: {dropins}"
 
 kmp = by_kind["KarpenterMachinePool"]
 pool = kmp["metadata"]["name"]
@@ -49,9 +57,6 @@ ec2 = kmp["spec"]["ec2NodeClass"]
 mappings = {m["deviceName"]: m for m in ec2["blockDeviceMappings"]}
 assert mappings["/dev/xvda"].get("rootVolume") and "/dev/xvde" in mappings, mappings.keys()
 if opts.lib_source:
-    files = {f["path"]: base64.b64decode(f["content"]).decode() for f in kc["spec"]["files"] if f.get("encoding") == "base64"}
-    ignition = yaml.safe_load(kc["spec"]["ignition"]["containerLinuxConfig"]["additionalConfig"])
-    units = {u["name"]: u for u in ignition["systemd"]["units"]}
     filesystems = {f["name"]: f["mount"] for f in ignition["storage"]["filesystems"]}
     assert "What=/dev/disk/by-label/lib" in units["var-lib.mount"]["contents"] and units["var-lib.mount"]["enabled"], units["var-lib.mount"]
     assert filesystems["log"]["device"] == "/dev/xvde", filesystems
@@ -80,9 +85,6 @@ else:
     assert zone is None, f"an empty pool.zones renders no zone requirement: {zone}"
 
 if opts.nvidia_driver:
-    files = {f["path"]: base64.b64decode(f["content"]).decode() for f in kc["spec"]["files"] if f.get("encoding") == "base64"}
-    ignition = yaml.safe_load(kc["spec"]["ignition"]["containerLinuxConfig"]["additionalConfig"])
-    units = {u["name"]: u for u in ignition["systemd"]["units"]}
     downloads = ignition.get("storage", {}).get("files", [])
     cdi = files["/etc/systemd/system/nvidia-cdi-spec.service"]
     if opts.nvidia_driver == "flatcar-sysext":

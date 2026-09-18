@@ -3,7 +3,7 @@
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: KubeadmConfig
 metadata:
-  name: test-wc-gpu00-00266
+  name: test-wc-gpu00-79b49
   namespace: org-giantswarm
   annotations:
     machine-pool.giantswarm.io/name: test-wc-gpu00
@@ -147,6 +147,15 @@ spec:
                 CPUAccounting=true
                 MemoryAccounting=true
                 Slice=kubereserved.slice
+            # The one drop-in every GPU node of the platform carries, pool or not.
+            - name: memlock.conf
+              contents: |
+                # GPU node: a serving runtime that mlock()s its weights (a unified-memory stack
+                # such as B12X) needs an unlimited locked-memory limit. containerd's unit
+                # default is 8 MB and a container has no CAP_IPC_LOCK to raise it
+                # (giantswarm/agent-platform#564).
+                [Service]
+                LimitMEMLOCK=infinity
           - name: auditd.service
             enabled: false
           - name: teleport.service

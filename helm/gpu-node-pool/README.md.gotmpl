@@ -86,6 +86,17 @@ exactly what it says. (With the driver built at boot, whose binaries land under 
 per-container discovery mounted `nvidia-smi` off every container's PATH and the GPU operator's toolkit
 validation never passed — the reason the pool sets `mode = "cdi"` for both sources.)
 
+The bootstrap also lets a workload **lock its memory**: the drop-in `memlock.conf` on `containerd.service`,
+next to the cgroup drop-in the cluster charts carry, sets `LimitMEMLOCK=infinity`. A container inherits
+containerd's `RLIMIT_MEMLOCK` — the unit's default is 8 MB — and its default capability set has no
+`CAP_IPC_LOCK`, root included, so under the default a serving runtime that `mlock()`s its weights (a
+unified-memory stack locks every weight allocation so the resident weights survive file readahead) fails its
+first lock and dies at engine start with an out-of-memory at a few MiB while the node has a hundred GiB free;
+granting the capability to the container is refused under the baseline and restricted Pod Security Standards.
+With the limit unlimited the lock is bounded by the container's memory limit, which the cgroup charges for the
+locked pages (`systemctl show containerd -p LimitMEMLOCK` on the node reads `infinity`). A GPU node not
+created by the pool needs the same drop-in.
+
 `pool.nvidiaDriver.branch` picks the branch (`570` by default; `535` and `550` as Flatcar ships them) — the
 CUDA runtime image decides which branches it accepts. `pool.nvidiaDriver.baseURL` names a directory holding
 the release's `flatcar-nvidia-drivers-<branch>.raw` for a network the Flatcar release server is not reachable
