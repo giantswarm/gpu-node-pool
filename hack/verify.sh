@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # make verify: goldens per accelerator with and without teleport, the render's
 # shape, the KarpenterMachinePool against the CRD the installation serves, the
-# prewarm pair and the chart's refusals, and the bootstrap diff against the
+# prewarm Job and the chart's refusals, and the bootstrap diff against the
 # pinned cluster-aws (hack/oracle). `hack/verify.sh update` rewrites the goldens.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -65,22 +65,27 @@ crd=$(oracle aws-resolver-rules-operator)/templates/infrastructure.cluster.x-k8s
 for accelerator in nvidia-l4 nvidia-a10g nvidia-t4 nvidia-l40s; do
   for teleport in true false; do
     render --set "pool.accelerator=$accelerator" --set "teleport.enabled=$teleport" > "$work/render.yaml"
-    python3 hack/check_render.py < "$work/render.yaml"
+    python3 hack/check_render.py --namespace "$namespace" < "$work/render.yaml"
     python3 hack/check_crd.py "$crd" < "$work/render.yaml"
     compare "$fixture/goldens/$accelerator-teleport-$teleport.yaml" "$work/render.yaml"
   done
 done
 
-# The prewarm pair renders for the installation's own pool (the fixture's
-# management cluster is `test`, so it is opted in) and nowhere else.
+# The prewarm Job renders for the installation's own pool (the fixture's
+# management cluster is `test`, so it is opted in) and nowhere else, under the
+# platform's PriorityClass by default or the one named -- never a PriorityClass of
+# its own: check_render.py holds every object of the render to the release namespace.
 prewarm=(--set pool.prewarm.enabled=true --set cluster.managementCluster=test-wc)
 render "${prewarm[@]}" > "$work/render.yaml"
-python3 hack/check_render.py --prewarm < "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --prewarm agent-platform-prewarm-placeholder < "$work/render.yaml"
 python3 hack/check_crd.py "$crd" < "$work/render.yaml"
+render "${prewarm[@]}" --set pool.prewarm.priorityClassName=pool-placeholder > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --prewarm pool-placeholder < "$work/render.yaml"
 # --show-only ends with blank lines; the golden ends with one newline, as end-of-file-fixer wants it.
 printf '%s\n' "$(render "${prewarm[@]}" --show-only templates/prewarm.yaml)" > "$work/prewarm.yaml"
 compare "$fixture/goldens/prewarm.yaml" "$work/prewarm.yaml"
 refused "pool.prewarm needs the release on the cluster the pool joins" --set pool.prewarm.enabled=true
+refused "pool.prewarm.priorityClassName names the PriorityClass" "${prewarm[@]}" --set pool.prewarm.priorityClassName=
 refused "exceeds 0.25 MiB/s per IOPS" --set pool.volumes.libThroughput=1000 --set pool.volumes.libIops=3000
 
 helm template test-wc "$(oracle cluster-aws)" -n "$namespace" -f hack/oracle/values.yaml > "$work/oracle.yaml"

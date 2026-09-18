@@ -7,18 +7,16 @@ are one cluster only for the installation's own pool.
 {{- if ne .Values.cluster.name .Values.cluster.managementCluster }}
 {{- fail (printf "pool.prewarm needs the release on the cluster the pool joins: cluster.name %q is not the management cluster %q" .Values.cluster.name .Values.cluster.managementCluster) }}
 {{- end }}
+{{- /*
+A pool release is delivered as the organisation's tenant account, whose rights
+end at the release namespace: the chart renders nothing cluster-scoped. The
+PriorityClass the placeholder runs under (a negative value, preemptionPolicy
+Never) is shipped by the platform release and referenced here by name. An empty
+name would give the pod priority 0, which no workload preempts.
+*/}}
+{{- $class := .Values.pool.prewarm.priorityClassName | required "pool.prewarm.priorityClassName names the PriorityClass the placeholder holds the GPU under (the platform release ships agent-platform-prewarm-placeholder)" }}
 {{- $poolName := include "gpu-node-pool.poolName" . }}
 {{- $hold := int .Values.pool.prewarm.holdMinutes }}
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: {{ $poolName }}-prewarm
-  labels:
-    {{- include "gpu-node-pool.poolLabels" . | nindent 4 }}
-value: -1000
-globalDefault: false
-preemptionPolicy: Never
-description: Placeholder holding one GPU of pool {{ $poolName }} until the first workload preempts it.
 {{- /*
 One shot, on install only: an upgrade never re-creates the Job, and the
 annotation keeps a Flux drift correction from bringing it back once its TTL
@@ -26,7 +24,6 @@ has removed it. backoffLimit 0 with restartPolicy Never: a preempted pod is
 not replaced, so the placeholder never launches a second node.
 */}}
 {{- if .Release.IsInstall }}
----
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -47,7 +44,7 @@ spec:
         {{- include "labels.selector" . | nindent 8 }}
         giantswarm.io/machine-pool: {{ $poolName | quote }}
     spec:
-      priorityClassName: {{ $poolName }}-prewarm
+      priorityClassName: {{ $class }}
       restartPolicy: Never
       terminationGracePeriodSeconds: 0
       automountServiceAccountToken: false

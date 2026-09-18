@@ -13,7 +13,9 @@
 
 For an existing Cluster API cluster named in its values the chart renders three objects in the
 release's namespace (`org-<organization>`) and no Secret of its own — with `pool.prewarm.enabled`
-also the [prewarm](#prewarming-the-first-node) PriorityClass and Job:
+also the [prewarm](#prewarming-the-first-node) Job. Every object is namespaced: a pool release
+is delivered as the organisation's tenant ServiceAccount, whose rights end at the release
+namespace, so the chart renders nothing cluster-scoped.
 
 - a **`MachinePool`** `<cluster>-<pool>` with `version` the pool's own Kubernetes version,
 - a **`KubeadmConfig`** `<cluster>-<pool>-<hash>` carrying the worker bootstrap of a CAPA Flatcar
@@ -36,7 +38,7 @@ Nothing references an object the cluster's release renames on upgrade.
 | `pool.accelerator`, `pool.sizes` | one of the curated list (`nvidia-l4` → `g6`, `nvidia-a10g` → `g5`, `nvidia-t4` → `g4dn`, `nvidia-l40s` → `g6e`) and the instance sizes Karpenter may pick | the person |
 | `pool.minSize`, `pool.maxSize` | `0` — Karpenter scales the pool to zero — and the Karpenter `limits` bounding it (`nvidia.com/gpu`, `cpu`, `memory`) | the person |
 | `pool.volumes.root`, `pool.volumes.lib`, `pool.volumes.log`, `pool.volumes.libThroughput`, `pool.volumes.libIops` | the node's gp3 volumes and the [provisioned performance of the lib volume](#the-lib-volume) | the person; the defaults fit a serving node |
-| `pool.prewarm` | [launch the first node at install](#prewarming-the-first-node) with a preemptible placeholder Job; the installation's own pool only | the person, through cluster-manager |
+| `pool.prewarm` | [launch the first node at install](#prewarming-the-first-node) with a preemptible placeholder Job under the platform's PriorityClass (`pool.prewarm.priorityClassName`); the installation's own pool only | the person, through cluster-manager |
 | `pool.kubernetesVersion`, `pool.machineImage` | the pool's own pins | cluster-manager, from the cluster's Release CR at creation |
 | `teleport.enabled` | join the nodes to Teleport | cluster-manager, from the presence of `<cluster>-teleport-join-token` |
 | `cluster.baseDomain`, `cluster.managementCluster`, `cluster.containerRegistry`, `cluster.registryMirrors`, `cluster.proxy`, `cluster.cilium.ipamMode`, `cluster.kubelet.maxPods` | the snapshot of the cluster's settings the bootstrap needs | cluster-manager, from the cluster's values and `AWSCluster` at creation; refreshed by a re-run |
@@ -83,9 +85,19 @@ the serving stack that loads a model is ready — and a fresh node needs minutes
 node. With `pool.prewarm.enabled` the chart launches that node at install. A one-shot **Job**
 `<cluster>-<pool>-prewarm` in the release's namespace runs a pod that requests one `nvidia.com/gpu`,
 tolerates the pool's taint, selects the pool's nodes (`giantswarm.io/machine-pool`) and sleeps
-`pool.prewarm.holdMinutes`, under a **PriorityClass** `<cluster>-<pool>-prewarm` of value -1000
-with `preemptionPolicy: Never`. Karpenter launches the node for the placeholder; the first
-workload (priority 0) preempts the placeholder and takes its GPU.
+`pool.prewarm.holdMinutes`, under the **PriorityClass** named by `pool.prewarm.priorityClassName`
+— a class of negative value with `preemptionPolicy: Never`. Karpenter launches the node for the
+placeholder; the first workload (priority 0) preempts the placeholder and takes its GPU.
+
+The chart renders no PriorityClass. The class is cluster-scoped, and a pool release is delivered
+as the organisation's tenant ServiceAccount, whose rights end at the release namespace — a
+release rendering one fails to install. The default, `agent-platform-prewarm-placeholder`
+(value -1000, `preemptionPolicy: Never`), is shipped by the agent-platform release with its
+model-serving component; an empty name is refused at render, since a pod without a class has
+priority 0 and no workload preempts it. Where the class does not exist on the cluster the pool
+installs all the same: admission refuses the Job's pod (`no PriorityClass with name … was
+found`), no node launches, the Job ends at its deadline and removes itself, and the first node
+comes with the first workload as without prewarm.
 
 The placeholder never launches a second node. The Job has `restartPolicy: Never` and
 `backoffLimit: 0`, so a preempted pod is not replaced; its `activeDeadlineSeconds` — the hold
@@ -136,8 +148,10 @@ served model; bumps are meant to be explicit.
 `make verify` renders the fixture cluster (`ci/ci-values.yaml`, which `ct lint` uses as well) for every accelerator with and without
 teleport, compares the goldens, validates every `KarpenterMachinePool` against the CRD served by
 the pinned aws-resolver-rules-operator (fields, types, patterns and enums — not its CEL rules),
-renders the prewarm pair into its own golden, checks the chart's refusals (prewarm off the
-management cluster, a lib volume beyond gp3's throughput-per-IOPS ratio), and diffs the
+holds every object of a render to the release namespace (nothing cluster-scoped), renders the
+prewarm Job into its own golden — under the default class and under a named one — checks the
+chart's refusals (prewarm off the management cluster, an empty `pool.prewarm.priorityClassName`,
+a lib volume beyond gp3's throughput-per-IOPS ratio), and diffs the
 bootstrap — as the node sees it, files resolved — against the newest released cluster-aws. Both
 oracles are pinned in `hack/oracle/Chart.yaml` and bumped by Renovate. The intentional
 differences are the one list in `hack/oracle/whitelist.yaml`; any other difference fails CI, so a

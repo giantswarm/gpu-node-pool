@@ -96,6 +96,10 @@ pool:
     holdMinutes: 15
     # -- Image of the placeholder; anything with `sleep`.
     image: gsoci.azurecr.io/giantswarm/alpine:3.22.1
+    # -- Name of the PriorityClass the placeholder runs under: a negative value with
+    # `preemptionPolicy: Never`, so the first workload preempts it. The chart renders no
+    # PriorityClass (a pool release is namespaced); the agent-platform release ships this one.
+    priorityClassName: agent-platform-prewarm-placeholder
 
 teleport:
   # -- Join the nodes to Teleport with the cluster's `<cluster>-teleport-join-token` Secret; off where the cluster has none.
