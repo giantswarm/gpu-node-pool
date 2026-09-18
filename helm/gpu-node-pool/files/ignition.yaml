@@ -49,11 +49,13 @@ systemd:
         CPUAccounting=true
         MemoryAccounting=true
         Slice=kubereserved.slice
-    # A container inherits containerd's locked-memory limit and has no
-    # CAP_IPC_LOCK, so under the unit's 8 MB default a runtime that mlock()s
-    # its weights dies at start: unlimited on a GPU node.
-    - name: 20-memlock.conf
+    # The one drop-in every GPU node of the platform carries, pool or not.
+    - name: memlock.conf
       contents: |
+        # GPU node: a serving runtime that mlock()s its weights (a unified-memory stack
+        # such as B12X) needs an unlimited locked-memory limit. containerd's unit
+        # default is 8 MB and a container has no CAP_IPC_LOCK to raise it
+        # (giantswarm/agent-platform#564).
         [Service]
         LimitMEMLOCK=infinity
   - name: auditd.service

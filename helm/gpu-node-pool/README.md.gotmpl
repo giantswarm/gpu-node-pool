@@ -86,7 +86,7 @@ exactly what it says. (With the driver built at boot, whose binaries land under 
 per-container discovery mounted `nvidia-smi` off every container's PATH and the GPU operator's toolkit
 validation never passed — the reason the pool sets `mode = "cdi"` for both sources.)
 
-The bootstrap also lets a workload **lock its memory**: the drop-in `20-memlock.conf` on `containerd.service`,
+The bootstrap also lets a workload **lock its memory**: the drop-in `memlock.conf` on `containerd.service`,
 next to the cgroup drop-in the cluster charts carry, sets `LimitMEMLOCK=infinity`. A container inherits
 containerd's `RLIMIT_MEMLOCK` — the unit's default is 8 MB — and its default capability set has no
 `CAP_IPC_LOCK`, root included, so under the default a serving runtime that `mlock()`s its weights (a

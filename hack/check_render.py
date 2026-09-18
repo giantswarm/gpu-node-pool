@@ -5,7 +5,7 @@ Job holding one GPU of the pool under the PriorityClass of that name -- every ob
 in the release namespace and nothing cluster-scoped (a pool release is delivered as
 the organisation's tenant account, whose rights end at the namespace), no Secret, no
 accelerator label, KubeadmConfig.discovery left to CABPK, containerd's locked-memory limit
-unlimited (the `20-memlock.conf` drop-in: a container inherits the limit and has no CAP_IPC_LOCK, so
+unlimited (the `memlock.conf` drop-in: a container inherits the limit and has no CAP_IPC_LOCK, so
 a runtime that mlock()s its weights dies under the 8 MB default), the node's lib volume as
 `--lib-source` names it (instance-store: the unit formatting the store, its script and
 Karpenter's instanceStorePolicy, no lib filesystem entry and no lib block device mapping;
@@ -49,7 +49,7 @@ ignition = yaml.safe_load(kc["spec"]["ignition"]["containerLinuxConfig"]["additi
 units = {u["name"]: u for u in ignition["systemd"]["units"]}
 dropins = {d["name"]: d["contents"] for d in units["containerd.service"]["dropins"]}
 assert "Slice=kubereserved.slice" in dropins["10-change-cgroup.conf"], dropins
-assert "LimitMEMLOCK=infinity" in dropins["20-memlock.conf"], f"a GPU node's containerd lets a workload lock its memory: {dropins}"
+assert "LimitMEMLOCK=infinity" in dropins["memlock.conf"], f"a GPU node's containerd lets a workload lock its memory: {dropins}"
 
 kmp = by_kind["KarpenterMachinePool"]
 pool = kmp["metadata"]["name"]
