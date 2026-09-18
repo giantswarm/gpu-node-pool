@@ -1,85 +1,92 @@
-{{- $poolName := include "gpu-node-pool.poolName" . }}
-{{- $lib := .Values.pool.volumes }}
-{{- /* gp3 provisions at most 0.25 MiB/s per IOPS; EC2 refuses the launch otherwise, late and in Karpenter's logs. */}}
-{{- if gt (mul 4 (int $lib.libThroughput)) (int $lib.libIops) }}
-{{- fail (printf "pool.volumes.libThroughput %d MiB/s exceeds 0.25 MiB/s per IOPS at pool.volumes.libIops %d (gp3)" (int $lib.libThroughput) (int $lib.libIops)) }}
-{{- end }}
+---
+# Source: gpu-node-pool/templates/karpentermachinepool.yaml
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
 kind: KarpenterMachinePool
 metadata:
-  name: {{ $poolName }}
-  namespace: {{ .Release.Namespace }}
+  name: test-wc-gpu00
+  namespace: org-giantswarm
   labels:
-    {{- include "gpu-node-pool.poolLabels" . | nindent 4 }}
+    app: "gpu-node-pool"
+    app.kubernetes.io/name: "gpu-node-pool"
+    app.kubernetes.io/instance: "test-wc-gpu00"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/version: "0.0.1"
+    application.giantswarm.io/team: "bumblebee"
+    helm.sh/chart: "gpu-node-pool-0.0.0-dev"
+    cluster.x-k8s.io/cluster-name: "test-wc"
+    cluster.x-k8s.io/watch-filter: capi
+    giantswarm.io/cluster: "test-wc"
+    giantswarm.io/machine-pool: "test-wc-gpu00"
+    giantswarm.io/organization: "giantswarm"
 spec:
   ec2NodeClass:
     amiSelectorTerms:
-    - name: {{ required "pool.machineImage is required" .Values.pool.machineImage }}
+    - name: flatcar-stable-4230.2.1-kube-1.33.1-tooling-1.27.0-gs
       owner: "706635527432"
     blockDeviceMappings:
     - deviceName: /dev/xvda
       ebs:
         deleteOnTermination: true
-        volumeSize: {{ .Values.pool.volumes.root }}
+        volumeSize: 15Gi
         volumeType: gp3
       rootVolume: true
     - deviceName: /dev/xvdd
       ebs:
         deleteOnTermination: true
         encrypted: true
-        iops: {{ $lib.libIops }}
-        throughput: {{ $lib.libThroughput }}
-        volumeSize: {{ $lib.lib }}
+        iops: 4000
+        throughput: 500
+        volumeSize: 200Gi
         volumeType: gp3
     - deviceName: /dev/xvde
       ebs:
         deleteOnTermination: true
         encrypted: true
-        volumeSize: {{ .Values.pool.volumes.log }}
+        volumeSize: 30Gi
         volumeType: gp3
-    instanceProfile: {{ .Values.cluster.name }}-worker
+    instanceProfile: test-wc-worker
     metadataOptions:
       httpPutResponseHopLimit: 3
       httpTokens: required
     securityGroupSelectorTerms:
     - tags:
-        sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .Values.cluster.name }}: owned
+        sigs.k8s.io/cluster-api-provider-aws/cluster/test-wc: owned
         sigs.k8s.io/cluster-api-provider-aws/role: node
     - tags:
-        sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .Values.cluster.name }}: owned
+        sigs.k8s.io/cluster-api-provider-aws/cluster/test-wc: owned
         sigs.k8s.io/cluster-api-provider-aws/role: lb
     subnetSelectorTerms:
     - tags:
         giantswarm.io/role: nodes
-        sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .Values.cluster.name }}: owned
+        sigs.k8s.io/cluster-api-provider-aws/cluster/test-wc: owned
     tags:
-      Name: {{ $poolName }}
+      Name: test-wc-gpu00
   nodePool:
     disruption:
       consolidationPolicy: WhenEmptyOrUnderutilized
-      consolidateAfter: {{ .Values.pool.consolidateAfter }}
+      consolidateAfter: 10m
     limits:
-      {{- toYaml .Values.pool.maxSize | nindent 6 }}
+      nvidia.com/gpu: "4"
     template:
       metadata:
         labels:
-          giantswarm.io/machine-pool: {{ $poolName }}
+          giantswarm.io/machine-pool: test-wc-gpu00
       spec:
         requirements:
         - key: karpenter.k8s.aws/instance-family
           operator: In
           values:
-          - {{ include "gpu-node-pool.instanceFamily" . }}
+          - g6
         - key: karpenter.k8s.aws/instance-size
           operator: In
           values:
-          {{- toYaml .Values.pool.sizes | nindent 10 }}
-        {{- with .Values.pool.zones }}
+          - xlarge
+          - 2xlarge
+          - 4xlarge
         - key: topology.kubernetes.io/zone
           operator: In
           values:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
+          - eu-central-1b
         - key: kubernetes.io/arch
           operator: In
           values:
