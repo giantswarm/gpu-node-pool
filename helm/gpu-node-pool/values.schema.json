@@ -196,6 +196,10 @@
                         "image": {
                             "type": "string",
                             "description": "Image of the placeholder; anything with `sleep`."
+                        },
+                        "priorityClassName": {
+                            "type": "string",
+                            "description": "Name of the PriorityClass the placeholder runs under: a negative value with `preemptionPolicy: Never`, so the first workload preempts it. The chart renders no PriorityClass (a pool release is namespaced); the agent-platform release ships this one."
                         }
                     }
                 },

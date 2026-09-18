@@ -1,30 +1,5 @@
 ---
 # Source: gpu-node-pool/templates/prewarm.yaml
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: test-wc-gpu00-prewarm
-  labels:
-    app: "gpu-node-pool"
-    app.kubernetes.io/name: "gpu-node-pool"
-    app.kubernetes.io/instance: "test-wc-gpu00"
-    app.kubernetes.io/managed-by: "Helm"
-    app.kubernetes.io/version: "0.0.1"
-    application.giantswarm.io/team: "bumblebee"
-    helm.sh/chart: "gpu-node-pool-0.0.0-dev"
-    cluster.x-k8s.io/cluster-name: "test-wc"
-    cluster.x-k8s.io/watch-filter: capi
-    giantswarm.io/cluster: "test-wc"
-    giantswarm.io/machine-pool: "test-wc-gpu00"
-    giantswarm.io/organization: "giantswarm"
-value: -1000
-globalDefault: false
-preemptionPolicy: Never
-description: Placeholder holding one GPU of pool test-wc-gpu00 until the first workload preempts it.
-
-
----
-# Source: gpu-node-pool/templates/prewarm.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -56,7 +31,7 @@ spec:
         app.kubernetes.io/instance: "test-wc-gpu00"
         giantswarm.io/machine-pool: "test-wc-gpu00"
     spec:
-      priorityClassName: test-wc-gpu00-prewarm
+      priorityClassName: agent-platform-prewarm-placeholder
       restartPolicy: Never
       terminationGracePeriodSeconds: 0
       automountServiceAccountToken: false
