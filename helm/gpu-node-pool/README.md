@@ -21,7 +21,8 @@ namespace, so the chart renders nothing cluster-scoped.
   Karpenter worker with every file inline; the hash covers the whole spec, so a bootstrap change
   renames the object and rolls the nodes,
 - a **`KarpenterMachinePool`** `<cluster>-<pool>` with the GPU shape: the instance family of the
-  chosen accelerator, the `nvidia.com/gpu` `NoSchedule` taint, consolidation down to zero nodes.
+  chosen accelerator, the `nvidia.com/gpu` `NoSchedule` taint, consolidation down to zero nodes
+  and, with `pool.zones`, a [zone requirement](#pinning-the-pool-to-zones).
 
 The nodes carry the label `giantswarm.io/machine-pool=<cluster>-<pool>`; the accelerator is read
 from gpu-feature-discovery's `nvidia.com/gpu.product`. The only object referenced by name outside
@@ -35,6 +36,7 @@ Nothing references an object the cluster's release renames on upgrade.
 | `cluster.name`, `cluster.organization` | the existing cluster | the person, through cluster-manager |
 | `pool.name` | `^[a-z0-9][-a-z0-9]{3,18}[a-z0-9]$` — five to twenty characters, `gpu00` or `gpu-l4`, not `gpu`; `<cluster>-<pool>` becomes the NodePool, EC2NodeClass and S3 key | the person |
 | `pool.accelerator`, `pool.sizes` | one of the curated list (`nvidia-l4` → `g6`, `nvidia-a10g` → `g5`, `nvidia-t4` → `g4dn`, `nvidia-l40s` → `g6e`) and the instance sizes Karpenter may pick | the person |
+| `pool.zones` | the availability zones the nodes launch in, [pinning the pool](#pinning-the-pool-to-zones) to a zonal volume it serves; empty for any zone of the cluster's node subnets | the person; cluster-manager, from the installation's kept model cache claim |
 | `pool.minSize`, `pool.maxSize` | `0` — Karpenter scales the pool to zero — and the Karpenter `limits` bounding it (`nvidia.com/gpu`, `cpu`, `memory`) | the person |
 | `pool.volumes.root`, `pool.volumes.lib`, `pool.volumes.log`, `pool.volumes.libThroughput`, `pool.volumes.libIops` | the node's gp3 volumes and the [provisioned performance of the lib volume](#the-lib-volume) | the person; the defaults fit a serving node |
 | `pool.prewarm` | [launch the first node at install](#prewarming-the-first-node) with a preemptible placeholder Job under the platform's PriorityClass (`pool.prewarm.priorityClassName`); the installation's own pool only | the person, through cluster-manager |
@@ -120,6 +122,23 @@ to 16000 IOPS with at most 0.25 MiB/s per provisioned IOPS; the chart refuses a 
 ratio, which EC2 would refuse at launch. The root and log volumes stay at gp3's baseline
 (125 MiB/s, 3000 IOPS).
 
+## Pinning the pool to zones
+
+Karpenter launches a pool's node in any zone the cluster's node subnets span and the
+instance family is offered in — right until something zonal enters. A PersistentVolume on
+EBS lives in one zone, and a pod that mounts it schedules only there. An installation that
+keeps a model cache claim is the case at hand: the predictor mounting the cache is pinned to
+the claim's zone while the [prewarm](#prewarming-the-first-node) placeholder is not, so the
+placeholder's node may launch in another zone; under a one-GPU limit no second node
+follows, and the predictor sits Pending (`didn't match PersistentVolume's node affinity`)
+on a pool that reads ready.
+
+`pool.zones` (default empty: no constraint) adds a `topology.kubernetes.io/zone In [...]`
+requirement to the NodePool template, so every node of the pool — placeholder and workload
+alike — comes up in the named zones; Karpenter picks the subnet there. cluster-manager sets
+it from the kept cache claim's zone where the installation has one. A zone outside the
+cluster's node subnets launches nothing.
+
 ## The skew rule
 
 The pool pins its own Kubernetes version and machine image. A cluster upgrade never touches
@@ -148,10 +167,12 @@ served model; bumps are meant to be explicit.
 teleport, compares the goldens, validates every `KarpenterMachinePool` against the CRD served by
 the pinned aws-resolver-rules-operator (fields, types, patterns and enums — not its CEL rules),
 holds every object of a render to the release namespace (nothing cluster-scoped), renders the
-prewarm Job into its own golden — under the default class and under a named one — checks the
-chart's refusals (prewarm off the management cluster, an empty `pool.prewarm.priorityClassName`,
-a lib volume beyond gp3's throughput-per-IOPS ratio), and diffs the
-bootstrap — as the node sees it, files resolved — against the newest released cluster-aws. Both
+prewarm Job into its own golden — under the default class and under a named one — renders the
+`KarpenterMachinePool` of a zone-pinned pool into its own golden (the default goldens hold that
+an empty `pool.zones` renders no zone requirement), checks the chart's refusals (prewarm off the
+management cluster, an empty `pool.prewarm.priorityClassName`, a lib volume beyond gp3's
+throughput-per-IOPS ratio), and diffs the bootstrap — as the node sees it, files resolved —
+against the newest released cluster-aws. Both
 oracles are pinned in `hack/oracle/Chart.yaml` and bumped by Renovate. The intentional
 differences are the one list in `hack/oracle/whitelist.yaml`; any other difference fails CI, so a
 cluster-aws bump that changes the worker bootstrap fails until the chart follows. `make goldens`
@@ -178,6 +199,7 @@ rewrites the goldens.
 | pool.machineImage | string | `""` | Name of the Flatcar machine image (`flatcar-<channel>-<flatcar>-kube-<k8s>-tooling-<tooling>-gs`). |
 | pool.accelerator | string | `"nvidia-l4"` | Accelerator from the curated list; picks the EC2 instance family. |
 | pool.sizes | list | `["xlarge","2xlarge","4xlarge"]` | Instance sizes Karpenter may pick within the accelerator's family, smallest first. |
+| pool.zones | list | `[]` | Availability zones the pool's nodes launch in (`eu-central-1b`), among the cluster's node subnets; empty for any of them. An installation with a kept model cache pins its pools to the cache's zone: the claim is one EBS volume, and a node in another zone strands the workload mounting it. |
 | pool.minSize | int | `0` | Minimum size; Karpenter scales the pool to zero when nothing is scheduled. |
 | pool.maxSize | object | `{"nvidia.com/gpu":"4"}` | Upper bound of the pool, as Karpenter limits (resources across all of its nodes). |
 | pool.consolidateAfter | string | `"10m"` | Time an empty or underutilized node lives before Karpenter consolidates it. |

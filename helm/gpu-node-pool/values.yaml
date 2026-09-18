@@ -62,6 +62,11 @@ pool:
     - xlarge
     - 2xlarge
     - 4xlarge
+  # @schema item:string
+  # -- Availability zones the pool's nodes launch in (`eu-central-1b`), among the cluster's node
+  # subnets; empty for any of them. An installation with a kept model cache pins its pools to the
+  # cache's zone: the claim is one EBS volume, and a node in another zone strands the workload mounting it.
+  zones: []
   # @schema enum:[0]
   # -- Minimum size; Karpenter scales the pool to zero when nothing is scheduled.
   minSize: 0

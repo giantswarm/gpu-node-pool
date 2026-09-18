@@ -240,6 +240,13 @@
                             "description": "Root volume."
                         }
                     }
+                },
+                "zones": {
+                    "type": "array",
+                    "description": "Availability zones the pool's nodes launch in (`eu-central-1b`), among the cluster's node subnets; empty for any of them. An installation with a kept model cache pins its pools to the cache's zone: the claim is one EBS volume, and a node in another zone strands the workload mounting it.",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
