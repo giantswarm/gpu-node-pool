@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # make verify: goldens per accelerator with and without teleport, the render's
 # shape, the KarpenterMachinePool against the CRD the installation serves, the
-# prewarm Job, the zone pin, the chart's refusals, and the bootstrap diff against
-# the pinned cluster-aws (hack/oracle). `hack/verify.sh update` rewrites the goldens.
+# prewarm Job, the zone pin, the lib volume's sources, the driver's sources, the
+# chart's refusals, and the bootstrap diff against the pinned cluster-aws
+# (hack/oracle). `hack/verify.sh update` rewrites the goldens.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -65,7 +66,7 @@ crd=$(oracle aws-resolver-rules-operator)/templates/infrastructure.cluster.x-k8s
 for accelerator in nvidia-l4 nvidia-a10g nvidia-t4 nvidia-l40s; do
   for teleport in true false; do
     render --set "pool.accelerator=$accelerator" --set "teleport.enabled=$teleport" > "$work/render.yaml"
-    python3 hack/check_render.py --namespace "$namespace" --nvidia-driver flatcar-sysext < "$work/render.yaml"
+    python3 hack/check_render.py --namespace "$namespace" --lib-source instance-store --nvidia-driver flatcar-sysext < "$work/render.yaml"
     python3 hack/check_crd.py "$crd" < "$work/render.yaml"
     compare "$fixture/goldens/$accelerator-teleport-$teleport.yaml" "$work/render.yaml"
   done
@@ -97,6 +98,16 @@ python3 hack/check_render.py --namespace "$namespace" --zones eu-central-1b < "$
 python3 hack/check_crd.py "$crd" < "$work/render.yaml"
 printf '%s\n' "$(render "${zones[@]}" --show-only templates/karpentermachinepool.yaml)" > "$work/zones.yaml"
 compare "$fixture/goldens/zones.yaml" "$work/zones.yaml"
+
+# pool.volumes.libSource: the goldens above hold the default, the node's instance
+# store as /var/lib (the unit formatting it, no lib filesystem entry, no lib block
+# device mapping, Karpenter's instanceStorePolicy). ebs renders the provisioned gp3
+# lib volume -- the objects as they were before the instance store.
+ebs=(--set pool.volumes.libSource=ebs)
+render "${ebs[@]}" > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --lib-source ebs --nvidia-driver flatcar-sysext < "$work/render.yaml"
+python3 hack/check_crd.py "$crd" < "$work/render.yaml"
+compare "$fixture/goldens/lib-ebs.yaml" "$work/render.yaml"
 
 # pool.nvidiaDriver: the goldens above hold the default, Flatcar's prebuilt
 # extension (the enabled-sysext line, nvidia.service masked, the CDI unit ordered

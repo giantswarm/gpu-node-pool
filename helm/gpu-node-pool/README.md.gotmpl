@@ -39,7 +39,7 @@ Nothing references an object the cluster's release renames on upgrade.
 | `pool.accelerator`, `pool.sizes` | one of the curated list (`nvidia-l4` → `g6`, `nvidia-a10g` → `g5`, `nvidia-t4` → `g4dn`, `nvidia-l40s` → `g6e`) and the instance sizes Karpenter may pick | the person |
 | `pool.zones` | the availability zones the nodes launch in, [pinning the pool](#pinning-the-pool-to-zones) to a zonal volume it serves; empty for any zone of the cluster's node subnets | the person; cluster-manager, from the installation's kept model cache claim |
 | `pool.minSize`, `pool.maxSize` | `0` — Karpenter scales the pool to zero — and the Karpenter `limits` bounding it (`nvidia.com/gpu`, `cpu`, `memory`) | the person |
-| `pool.volumes.root`, `pool.volumes.lib`, `pool.volumes.log`, `pool.volumes.libThroughput`, `pool.volumes.libIops` | the node's gp3 volumes and the [provisioned performance of the lib volume](#the-lib-volume) | the person; the defaults fit a serving node |
+| `pool.volumes.libSource`, `pool.volumes.root`, `pool.volumes.lib`, `pool.volumes.log`, `pool.volumes.libThroughput`, `pool.volumes.libIops` | [the node's disks](#the-nodes-disks): `/var/lib` on the node's instance store by default or on a provisioned gp3 volume, the root and log volumes | the person; the defaults fit a serving node |
 | `pool.nvidiaDriver` | the source of the node's NVIDIA driver — Flatcar's prebuilt, release-matched extension by default, or the build at boot — its branch and a mirror for the extension image ([the image contract](#the-image-contract-what-the-image-provides-what-the-pool-configures)) | the person; the defaults fit every image since Flatcar 4344.0.0 |
 | `pool.prewarm` | [launch the first node at install](#prewarming-the-first-node) with a preemptible placeholder Job under the platform's PriorityClass (`pool.prewarm.priorityClassName`); the installation's own pool only | the person, through cluster-manager |
 | `pool.kubernetesVersion`, `pool.machineImage` | the pool's own pins | cluster-manager, from the cluster's Release CR at creation |
@@ -137,15 +137,37 @@ The Job is created where the release lives, on the management cluster; the pool'
 `cluster.name`. Both are one cluster only for the installation's own pool, so the chart refuses
 `pool.prewarm.enabled` where `cluster.name` is not `cluster.managementCluster`.
 
-## The lib volume
+## The node's disks
 
-`/var/lib` (`/dev/xvdd`: container images and kubelet) is a gp3 volume whose provisioned
-performance bounds the image pulls on a fresh node, and a serving runtime image is several
-gigabytes. `pool.volumes.libThroughput` (MiB/s, default 500) and `pool.volumes.libIops` (default
-4000) set the volume's `ebs.throughput` and `ebs.iops`. gp3 allows 125 to 1000 MiB/s and 3000
-to 16000 IOPS with at most 0.25 MiB/s per provisioned IOPS; the chart refuses a pair beyond that
-ratio, which EC2 would refuse at launch. The root and log volumes stay at gp3's baseline
-(125 MiB/s, 3000 IOPS).
+A pool node has a root volume (`pool.volumes.root`, gp3, 15 GiB), `/var/log` on a gp3 volume of
+`pool.volumes.log` (30 GiB) and `/var/lib` — the container image unpacks, the kubelet's directories,
+the pods' emptyDirs (a model's weights, where no cache claim is mounted) and the containers'
+writable layers — from `pool.volumes.libSource`:
+
+- **`instance-store`** (default): the node's own NVMe instance store. Every size of the curated
+  families has one, local to the host and included in the instance price: 250 GB on `xlarge`, 450
+  on `2xlarge`, 600 on `4xlarge` and 900 on `8xlarge` of g6, g6e and g5; 125, 225, 225 and 900 GB
+  on g4dn. The store's device name is not stable (EBS volumes are NVMe devices too), so the
+  bootstrap's `format-instance-store.service` — a oneshot ahead of `var-lib.mount`, which
+  `local-fs.target` requires — finds the first block device of model `Amazon EC2 NVMe Instance
+  Storage`, formats it as xfs labelled `lib` unless it carries that label already, and
+  `var-lib.mount` mounts `/dev/disk/by-label/lib` as on any node. No lib volume is provisioned: the
+  `/dev/xvdd` mapping and the Ignition `lib` filesystem are not rendered. The `ec2NodeClass` carries
+  `instanceStorePolicy: RAID0`, Karpenter's word for "the instance store is the node's ephemeral
+  storage": on a custom image the bootstrap prepares the disk and the policy makes Karpenter count
+  its size in scheduling (without it, the root volume's). The data is gone with the node — as the
+  lib volume was, deleted on termination. A size without an instance store fails the unit, which
+  names the disks present in its journal, and stops the boot there instead of joining the cluster
+  with `/var/lib` on the root volume; Karpenter replaces the node after its registration timeout.
+  The `8xlarge` of g6 and g6e have two devices of 450 GB; the first is used, the second stays idle.
+- **`ebs`**: a provisioned gp3 volume on `/dev/xvdd` of `pool.volumes.lib` (200 GiB) whose
+  performance bounds the image pulls on a fresh node. `pool.volumes.libThroughput` (MiB/s, default
+  500) and `pool.volumes.libIops` (default 4000) set the volume's `ebs.throughput` and `ebs.iops`.
+  gp3 allows 125 to 1000 MiB/s and 3000 to 16000 IOPS with at most 0.25 MiB/s per provisioned
+  IOPS; the chart refuses a pair beyond that ratio, which EC2 would refuse at launch.
+
+The root and log volumes stay at gp3's baseline (125 MiB/s, 3000 IOPS). Changing the source
+changes the bootstrap and rolls the pool's nodes.
 
 ## Pinning the pool to zones
 
@@ -194,7 +216,9 @@ the pinned aws-resolver-rules-operator (fields, types, patterns and enums — no
 holds every object of a render to the release namespace (nothing cluster-scoped), renders the
 prewarm Job into its own golden — under the default class and under a named one — renders the
 `KarpenterMachinePool` of a zone-pinned pool into its own golden (the default goldens hold that
-an empty `pool.zones` renders no zone requirement), renders the `KubeadmConfig` of
+an empty `pool.zones` renders no zone requirement), renders `pool.volumes.libSource: ebs` into its
+own golden (the default goldens hold the instance store: the format unit and its script, no lib
+filesystem entry, no lib block device mapping, `instanceStorePolicy: RAID0`), renders the `KubeadmConfig` of
 `pool.nvidiaDriver.source: image-build` and of a mirror (`pool.nvidiaDriver.baseURL`) into goldens of their
 own (the default goldens hold the extension's bootstrap), checks the chart's refusals (prewarm off the
 management cluster, an empty `pool.prewarm.priorityClassName`, a lib volume beyond gp3's

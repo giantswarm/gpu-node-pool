@@ -30,14 +30,6 @@ spec:
         volumeSize: 15Gi
         volumeType: gp3
       rootVolume: true
-    - deviceName: /dev/xvdd
-      ebs:
-        deleteOnTermination: true
-        encrypted: true
-        iops: 4000
-        throughput: 500
-        volumeSize: 200Gi
-        volumeType: gp3
     - deviceName: /dev/xvde
       ebs:
         deleteOnTermination: true
@@ -45,6 +37,7 @@ spec:
         volumeSize: 30Gi
         volumeType: gp3
     instanceProfile: test-wc-worker
+    instanceStorePolicy: RAID0
     metadataOptions:
       httpPutResponseHopLimit: 3
       httpTokens: required

@@ -30,6 +30,14 @@ spec:
         volumeSize: 15Gi
         volumeType: gp3
       rootVolume: true
+    - deviceName: /dev/xvdd
+      ebs:
+        deleteOnTermination: true
+        encrypted: true
+        iops: 4000
+        throughput: 500
+        volumeSize: 200Gi
+        volumeType: gp3
     - deviceName: /dev/xvde
       ebs:
         deleteOnTermination: true
@@ -37,7 +45,6 @@ spec:
         volumeSize: 30Gi
         volumeType: gp3
     instanceProfile: test-wc-worker
-    instanceStorePolicy: RAID0
     metadataOptions:
       httpPutResponseHopLimit: 3
       httpTokens: required
@@ -69,7 +76,7 @@ spec:
         - key: karpenter.k8s.aws/instance-family
           operator: In
           values:
-          - g4dn
+          - g6
         - key: karpenter.k8s.aws/instance-size
           operator: In
           values:
@@ -108,7 +115,7 @@ spec:
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: KubeadmConfig
 metadata:
-  name: test-wc-gpu00-98cf2
+  name: test-wc-gpu00-08a1b
   namespace: org-giantswarm
   annotations:
     machine-pool.giantswarm.io/name: test-wc-gpu00
@@ -181,14 +188,6 @@ spec:
     permissions: "0644"
     encoding: base64
     content: W1VuaXRdCkRlc2NyaXB0aW9uPUFkZCBBV1Mgc3BlY2lmaWMga3ViZWxldCBjb25maWd1cmF0aW9uCldhbnRzPW5ldHdvcmstb25saW5lLnRhcmdldApBZnRlcj1uZXR3b3JrLW9ubGluZS50YXJnZXQKQmVmb3JlPWt1YmVsZXQuc2VydmljZQoKW1NlcnZpY2VdClR5cGU9b25lc2hvdApSZW1haW5BZnRlckV4aXQ9eWVzCkV4ZWNTdGFydD0vb3B0L2Jpbi9rdWJlbGV0LWF3cy1jb25maWcuc2gKVGltZW91dFN0YXJ0U2VjPTIwClJlc3RhcnQ9b24tZmFpbHVyZQpSZXN0YXJ0U2VjPTEwCgpbSW5zdGFsbF0KV2FudGVkQnk9bXVsdGktdXNlci50YXJnZXQK
-  - path: /opt/bin/format-instance-store.sh
-    permissions: "0755"
-    encoding: base64
-    content: IyEvYmluL2Jhc2gKIyBUaGUgbGliIHZvbHVtZSBvbiB0aGUgbm9kZSdzIGluc3RhbmNlIHN0b3JlOiB0aGUgZmlyc3QgYmxvY2sgZGV2aWNlIG9mIG1vZGVsCiMgIkFtYXpvbiBFQzIgTlZNZSBJbnN0YW5jZSBTdG9yYWdlIiwgZm9ybWF0dGVkIGFzIHhmcyBsYWJlbGxlZCBsaWIgdW5sZXNzIGl0CiMgY2FycmllcyB0aGF0IGxhYmVsIGFscmVhZHkgKHRoZSBzdG9yZSBrZWVwcyBpdHMgZGF0YSBvdmVyIGEgcmVib290LCBuZXZlciBvdmVyCiMgYSBzdG9wIG9yIGEgcmVwbGFjZW1lbnQpLiB2YXItbGliLm1vdW50IG1vdW50cyAvZGV2L2Rpc2svYnktbGFiZWwvbGliLiBBIHNpemUKIyB3aXRoIHNldmVyYWwgZGV2aWNlcyBnZXRzIHRoZSBmaXJzdDsgd2l0aG91dCBvbmUgdGhlIHVuaXQgZmFpbHMgbmFtaW5nIHRoZQojIGRpc2tzIHByZXNlbnQsIGFuZCBsb2NhbC1mcy50YXJnZXQgd2l0aCBpdC4Kc2V0IC1ldW8gcGlwZWZhaWwKCm1vZGVsPSJBbWF6b24gRUMyIE5WTWUgSW5zdGFuY2UgU3RvcmFnZSIKZGV2aWNlPSIiCmZvciBfIGluICQoc2VxIDMwKTsgZG8KICBkZXZpY2U9JChsc2JsayAtZG5vIFBBVEgsTU9ERUwgfCBhd2sgLXYgbW9kZWw9IiRtb2RlbCIgJ2luZGV4KCQwLCBtb2RlbCkgeyBwcmludCAkMTsgZXhpdCB9JykKICBbIC1uICIkZGV2aWNlIiBdICYmIGJyZWFrCiAgc2xlZXAgMQpkb25lCmlmIFsgLXogIiRkZXZpY2UiIF07IHRoZW4KICBlY2hvICJubyBpbnN0YW5jZSBzdG9yZSBvbiB0aGlzIGluc3RhbmNlOyB0aGUgZGlza3MgYXJlOiIgPiYyCiAgbHNibGsgLWRubyBQQVRILFNJWkUsTU9ERUwgPiYyCiAgZXhpdCAxCmZpCmlmIFsgIiQoYmxraWQgLXMgTEFCRUwgLW8gdmFsdWUgIiRkZXZpY2UiIHx8IHRydWUpIiA9IGxpYiBdOyB0aGVuCiAgZWNobyAiJGRldmljZSBjYXJyaWVzIHRoZSBsaWIgZmlsZXN5c3RlbSBhbHJlYWR5IgogIGV4aXQgMApmaQpta2ZzLnhmcyAtZiAtTCBsaWIgIiRkZXZpY2UiCnVkZXZhZG0gdHJpZ2dlciAiJGRldmljZSIKdWRldmFkbSBzZXR0bGUKZWNobyAiJGRldmljZSBmb3JtYXR0ZWQgYXMgdGhlIGxpYiB2b2x1bWUiCg==
-  - path: /etc/systemd/system/format-instance-store.service
-    permissions: "0644"
-    encoding: base64
-    content: W1VuaXRdCkRlc2NyaXB0aW9uPUZvcm1hdCB0aGUgaW5zdGFuY2Ugc3RvcmUgYXMgdGhlIGxpYiB2b2x1bWUKIyBUaGUgbm9kZSdzIE5WTWUgaW5zdGFuY2Ugc3RvcmUsIGJsYW5rIGF0IGxhdW5jaCwgY2FycmllcyAvdmFyL2xpYjogdGhpcyB1bml0IGZpbmRzIGl0IGJ5IGl0cwojIG1vZGVsIChpdHMgZGV2aWNlIG5hbWUgaXMgbm90IHN0YWJsZSwgRUJTIHZvbHVtZXMgYXJlIE5WTWUgZGV2aWNlcyB0b28pLCBmb3JtYXRzIGl0IGFzIHhmcwojIGxhYmVsbGVkIGxpYiwgYW5kIHZhci1saWIubW91bnQgbW91bnRzIGl0IHRocm91Z2ggdGhlIGxhYmVsLiBBIHNpemUgd2l0aG91dCBhbiBpbnN0YW5jZSBzdG9yZQojIGZhaWxzIGhlcmUgYW5kIHN0b3BzIHRoZSBib290IC0tIGxvY2FsLWZzLnRhcmdldCByZXF1aXJlcyB0aGlzIHVuaXQgLS0gaW5zdGVhZCBvZiBqb2luaW5nIHRoZQojIGNsdXN0ZXIgd2l0aCAvdmFyL2xpYiBvbiB0aGUgcm9vdCB2b2x1bWUuCkRlZmF1bHREZXBlbmRlbmNpZXM9bm8KV2FudHM9c3lzdGVtZC11ZGV2ZC5zZXJ2aWNlCkFmdGVyPXN5c3RlbWQtdWRldmQuc2VydmljZQpCZWZvcmU9dmFyLWxpYi5tb3VudCBsb2NhbC1mcy50YXJnZXQKW1NlcnZpY2VdClR5cGU9b25lc2hvdApSZW1haW5BZnRlckV4aXQ9eWVzCkV4ZWNTdGFydD0vb3B0L2Jpbi9mb3JtYXQtaW5zdGFuY2Utc3RvcmUuc2gKW0luc3RhbGxdClJlcXVpcmVkQnk9dmFyLWxpYi5tb3VudCBsb2NhbC1mcy50YXJnZXQK
   - path: /etc/flatcar/enabled-sysext.conf
     permissions: "0644"
     encoding: base64
@@ -275,10 +274,6 @@ spec:
               WantedBy=multi-user.target
           - name: kubelet-aws-config.service
             enabled: true
-          # /var/lib is the node's instance store, formatted by this unit ahead of var-lib.mount; the
-          # lib filesystem below and the lib block device mapping are not rendered.
-          - name: format-instance-store.service
-            enabled: true
           # The driver is Flatcar's prebuilt nvidia-drivers extension, named in
           # /etc/flatcar/enabled-sysext.conf; the service that builds it at boot is masked.
           - name: nvidia.service
@@ -312,6 +307,12 @@ spec:
               WantedBy=local-fs-pre.target
         storage:
           filesystems:
+          - name: lib
+            mount:
+              device: /dev/xvdd
+              format: xfs
+              wipeFilesystem: true
+              label: lib
           - name: log
             mount:
               device: /dev/xvde
@@ -395,7 +396,7 @@ spec:
         configRef:
           apiGroup: bootstrap.cluster.x-k8s.io
           kind: KubeadmConfig
-          name: test-wc-gpu00-98cf2
+          name: test-wc-gpu00-08a1b
       clusterName: test-wc
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io

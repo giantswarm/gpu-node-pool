@@ -240,17 +240,25 @@
                     "properties": {
                         "lib": {
                             "type": "string",
-                            "description": "`/var/lib` volume (container images, kubelet)."
+                            "description": "Size of the `/var/lib` volume with `libSource: ebs`."
                         },
                         "libIops": {
                             "type": "integer",
-                            "description": "Provisioned IOPS of the `/var/lib` volume. gp3 allows 3000 to 16000.",
+                            "description": "Provisioned IOPS of the `/var/lib` volume with `libSource: ebs`. gp3 allows 3000 to 16000.",
                             "maximum": 16000,
                             "minimum": 3000
                         },
+                        "libSource": {
+                            "type": "string",
+                            "description": "Where `/var/lib` lives: the container images, the kubelet's directories and the pods' ephemeral storage. `instance-store`: the node's own NVMe instance store, which every size of the curated families has (125 to 900 GB below `12xlarge`), formatted at first boot and gone with the node; no lib volume is provisioned and Karpenter counts the store as the node's ephemeral storage. `ebs`: a provisioned gp3 volume of `lib`, `libThroughput` and `libIops`.",
+                            "enum": [
+                                "instance-store",
+                                "ebs"
+                            ]
+                        },
                         "libThroughput": {
                             "type": "integer",
-                            "description": "Provisioned throughput of the `/var/lib` volume in MiB/s; image pulls on a fresh node are bounded by it. gp3 allows 125 to 1000 and at most 0.25 MiB/s per provisioned IOPS.",
+                            "description": "Provisioned throughput of the `/var/lib` volume in MiB/s with `libSource: ebs`; image pulls on a fresh node are bounded by it. gp3 allows 125 to 1000 and at most 0.25 MiB/s per provisioned IOPS.",
                             "maximum": 1000,
                             "minimum": 125
                         },
