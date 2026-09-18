@@ -28,6 +28,10 @@ files:
 {{- end }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/opt/bin/kubelet-aws-config.sh" "permissions" "0755") }}
 {{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/system/kubelet-aws-config.service" "permissions" "0644") }}
+{{- if eq .Values.pool.volumes.libSource "instance-store" }}
+{{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/opt/bin/format-instance-store.sh" "permissions" "0755") }}
+{{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/system/format-instance-store.service" "permissions" "0644") }}
+{{- end }}
 {{- if eq .Values.pool.nvidiaDriver.source "flatcar-sysext" }}
 {{- $_ := include "gpu-node-pool.flatcarVersion" . }}
 {{ include "gpu-node-pool.file" (dict "path" "/etc/flatcar/enabled-sysext.conf" "permissions" "0644" "content" (printf "%s\n" (include "gpu-node-pool.nvidiaSysext" .))) }}

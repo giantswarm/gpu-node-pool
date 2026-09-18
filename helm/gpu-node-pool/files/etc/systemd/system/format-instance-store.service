@@ -1,0 +1,17 @@
+[Unit]
+Description=Format the instance store as the lib volume
+# The node's NVMe instance store, blank at launch, carries /var/lib: this unit finds it by its
+# model (its device name is not stable, EBS volumes are NVMe devices too), formats it as xfs
+# labelled lib, and var-lib.mount mounts it through the label. A size without an instance store
+# fails here and stops the boot -- local-fs.target requires this unit -- instead of joining the
+# cluster with /var/lib on the root volume.
+DefaultDependencies=no
+Wants=systemd-udevd.service
+After=systemd-udevd.service
+Before=var-lib.mount local-fs.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/bin/format-instance-store.sh
+[Install]
+RequiredBy=var-lib.mount local-fs.target

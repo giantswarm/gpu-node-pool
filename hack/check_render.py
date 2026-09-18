@@ -4,10 +4,13 @@ KubeadmConfig and a KarpenterMachinePool -- with `--prewarm <class>` also the pr
 Job holding one GPU of the pool under the PriorityClass of that name -- every object
 in the release namespace and nothing cluster-scoped (a pool release is delivered as
 the organisation's tenant account, whose rights end at the namespace), no Secret, no
-accelerator label, KubeadmConfig.discovery left to CABPK, the lib volume with
-provisioned throughput and IOPS within gp3's ratio, the NodePool template requiring
-exactly the zones of `--zones` (none without it), and the bootstrap of the driver source
-named by `--nvidia-driver`: with flatcar-sysext the enabled-sysext line, nvidia.service
+accelerator label, KubeadmConfig.discovery left to CABPK, the node's lib volume as
+`--lib-source` names it (instance-store: the unit formatting the store, its script and
+Karpenter's instanceStorePolicy, no lib filesystem entry and no lib block device mapping;
+ebs: the lib volume on /dev/xvdd with provisioned throughput and IOPS within gp3's ratio,
+no unit and no policy; either way var-lib.mount through the label), the NodePool template
+requiring exactly the zones of `--zones` (none without it), and the bootstrap of the driver
+source named by `--nvidia-driver`: with flatcar-sysext the enabled-sysext line, nvidia.service
 masked, the CDI unit ordered after the extension and -- with `--sysext-url` -- Ignition
 downloading the extension image from that URL into the path the OS activates it from;
 with image-build the build at boot and the CDI unit waiting for it."""
@@ -21,6 +24,7 @@ args = argparse.ArgumentParser(description=__doc__)
 args.add_argument("--namespace", required=True, help="the release namespace every object must be in")
 args.add_argument("--prewarm", metavar="CLASS", help="expect the prewarm Job under this PriorityClass")
 args.add_argument("--zones", metavar="ZONE[,ZONE]", help="expect the NodePool template to require these zones; without it, no zone requirement")
+args.add_argument("--lib-source", choices=["instance-store", "ebs"], help="expect the node's lib volume from this source")
 args.add_argument("--nvidia-driver", choices=["flatcar-sysext", "image-build"], help="expect the bootstrap of this driver source")
 args.add_argument("--sysext-url", metavar="URL", help="with flatcar-sysext, expect Ignition to download the extension image from this URL; without it, no download")
 opts = args.parse_args()
@@ -41,9 +45,33 @@ assert any(t["key"] == "nvidia.com/gpu" and t["effect"] == "NoSchedule" for t in
 
 kmp = by_kind["KarpenterMachinePool"]
 pool = kmp["metadata"]["name"]
-lib = next(m["ebs"] for m in kmp["spec"]["ec2NodeClass"]["blockDeviceMappings"] if m["deviceName"] == "/dev/xvdd")
-assert isinstance(lib["throughput"], int) and isinstance(lib["iops"], int), lib
-assert lib["throughput"] * 4 <= lib["iops"], f"gp3 allows 0.25 MiB/s per IOPS: {lib}"
+ec2 = kmp["spec"]["ec2NodeClass"]
+mappings = {m["deviceName"]: m for m in ec2["blockDeviceMappings"]}
+assert mappings["/dev/xvda"].get("rootVolume") and "/dev/xvde" in mappings, mappings.keys()
+if opts.lib_source:
+    files = {f["path"]: base64.b64decode(f["content"]).decode() for f in kc["spec"]["files"] if f.get("encoding") == "base64"}
+    ignition = yaml.safe_load(kc["spec"]["ignition"]["containerLinuxConfig"]["additionalConfig"])
+    units = {u["name"]: u for u in ignition["systemd"]["units"]}
+    filesystems = {f["name"]: f["mount"] for f in ignition["storage"]["filesystems"]}
+    assert "What=/dev/disk/by-label/lib" in units["var-lib.mount"]["contents"] and units["var-lib.mount"]["enabled"], units["var-lib.mount"]
+    assert filesystems["log"]["device"] == "/dev/xvde", filesystems
+    if opts.lib_source == "instance-store":
+        assert "/dev/xvdd" not in mappings and ec2.get("instanceStorePolicy") == "RAID0", (mappings.keys(), ec2.get("instanceStorePolicy"))
+        assert "lib" not in filesystems, filesystems
+        assert units["format-instance-store.service"] == {"name": "format-instance-store.service", "enabled": True}, units.get("format-instance-store.service")
+        unit = files["/etc/systemd/system/format-instance-store.service"]
+        for line in ("DefaultDependencies=no", "Before=var-lib.mount local-fs.target", "RequiredBy=var-lib.mount local-fs.target", "ExecStart=/opt/bin/format-instance-store.sh"):
+            assert line in unit, (line, unit)
+        script = files["/opt/bin/format-instance-store.sh"]
+        for step in ("Amazon EC2 NVMe Instance Storage", "mkfs.xfs -f -L lib", "exit 1"):
+            assert step in script, (step, script)
+    else:
+        lib = mappings["/dev/xvdd"]["ebs"]
+        assert isinstance(lib["throughput"], int) and isinstance(lib["iops"], int), lib
+        assert lib["throughput"] * 4 <= lib["iops"], f"gp3 allows 0.25 MiB/s per IOPS: {lib}"
+        assert "instanceStorePolicy" not in ec2, ec2["instanceStorePolicy"]
+        assert filesystems["lib"] == {"device": "/dev/xvdd", "format": "xfs", "wipeFilesystem": True, "label": "lib"}, filesystems.get("lib")
+        assert "format-instance-store.service" not in units and not any("format-instance-store" in path for path in files), (units.keys(), files.keys())
 requirements = {r["key"]: r for r in kmp["spec"]["nodePool"]["template"]["spec"]["requirements"]}
 zone = requirements.get("topology.kubernetes.io/zone")
 if opts.zones:

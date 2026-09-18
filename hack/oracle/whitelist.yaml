@@ -11,6 +11,7 @@
 - KarpenterMachinePool spec.ec2NodeClass.amiSelectorTerms
 # The GPU shape.
 - KarpenterMachinePool spec.ec2NodeClass.blockDeviceMappings
+- KarpenterMachinePool spec.ec2NodeClass.instanceStorePolicy
 - KarpenterMachinePool spec.nodePool.disruption
 - KarpenterMachinePool spec.nodePool.limits
 - KarpenterMachinePool spec.nodePool.template.spec.requirements
@@ -26,3 +27,10 @@
 - KubeadmConfig spec.ignition.containerLinuxConfig.additionalConfig.systemd.units[name=nvidia.service]
 - KubeadmConfig spec.files[path=/etc/systemd/system/nvidia-cdi-spec.service]
 - KubeadmConfig spec.ignition.containerLinuxConfig.additionalConfig.systemd.units[name=nvidia-cdi-spec.service]
+# The node's lib volume: /var/lib on the instance store in place of the gp3 volume
+# -- the unit formatting it and its script, and no lib filesystem entry (the
+# block device mappings are whitelisted above).
+- KubeadmConfig spec.files[path=/opt/bin/format-instance-store.sh]
+- KubeadmConfig spec.files[path=/etc/systemd/system/format-instance-store.service]
+- KubeadmConfig spec.ignition.containerLinuxConfig.additionalConfig.systemd.units[name=format-instance-store.service]
+- KubeadmConfig spec.ignition.containerLinuxConfig.additionalConfig.storage.filesystems[name=lib]
