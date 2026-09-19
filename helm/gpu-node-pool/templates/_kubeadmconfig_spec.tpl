@@ -16,7 +16,6 @@ files:
 {{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/timesyncd.conf" "permissions" "0644") }}
 {{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/kubernetes/patches/kubeletconfiguration.yaml" "permissions" "0644") }}
 {{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/logind.conf.d/zzz-kubelet-graceful-shutdown.conf" "permissions" "0700") }}
-{{- if .Values.teleport.enabled }}
 - path: /etc/teleport-join-token
   permissions: "0644"
   contentFrom:
@@ -25,7 +24,6 @@ files:
       key: joinToken
 {{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/opt/teleport-node-role.sh" "permissions" "0755") }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/etc/teleport.yaml" "permissions" "0644") }}
-{{- end }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/opt/bin/kubelet-aws-config.sh" "permissions" "0755") }}
 {{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/system/kubelet-aws-config.service" "permissions" "0644") }}
 {{- if eq .Values.pool.volumes.libSource "instance-store" }}
@@ -40,9 +38,7 @@ files:
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/etc/systemd/network/99-unmanaged-devices.network" "src" (printf "/etc/systemd/network/99-unmanaged-devices.network.%s" .Values.cluster.cilium.ipamMode) "permissions" "0644") }}
 {{- if .Values.cluster.proxy.enabled }}
 {{- range $unit := list "containerd" "kubelet" "teleport" }}
-{{- if or (ne $unit "teleport") $.Values.teleport.enabled }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" $ "path" (printf "/etc/systemd/system/%s.service.d/http-proxy.conf" $unit) "src" "/etc/systemd/http-proxy.conf" "permissions" "0644") }}
-{{- end }}
 {{- end }}
 {{- end }}
 format: ignition

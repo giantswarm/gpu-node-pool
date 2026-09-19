@@ -128,7 +128,3 @@ pool:
     # OS activates it without downloading. Empty: the OS fetches it from Flatcar's release server for its
     # own version.
     baseURL: ""
-
-teleport:
-  # -- Join the nodes to Teleport with the cluster's `<cluster>-teleport-join-token` Secret; off where the cluster has none.
-  enabled: true

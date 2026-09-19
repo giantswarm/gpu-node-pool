@@ -6,7 +6,10 @@ in the release namespace and nothing cluster-scoped (a pool release is delivered
 the organisation's tenant account, whose rights end at the namespace), no Secret, no
 accelerator label, KubeadmConfig.discovery left to CABPK, containerd's locked-memory limit
 unlimited (the `memlock.conf` drop-in: a container inherits the limit and has no CAP_IPC_LOCK, so
-a runtime that mlock()s its weights dies under the 8 MB default), the node's lib volume as
+a runtime that mlock()s its weights dies under the 8 MB default), the Teleport join as the
+cluster's own workers carry it (the join token from the cluster's `<cluster>-teleport-join-token`
+Secret, /etc/teleport.yaml, the role script, teleport.service enabled) and -- with `--proxy` --
+the http-proxy.conf drop-in of containerd, kubelet and teleport (none without it), the node's lib volume as
 `--lib-source` names it (instance-store: the unit formatting the store, its script and
 Karpenter's instanceStorePolicy, no lib filesystem entry and no lib block device mapping;
 ebs: the lib volume on /dev/xvdd with provisioned throughput and IOPS within gp3's ratio,
@@ -29,6 +32,7 @@ args.add_argument("--zones", metavar="ZONE[,ZONE]", help="expect the NodePool te
 args.add_argument("--lib-source", choices=["instance-store", "ebs"], help="expect the node's lib volume from this source")
 args.add_argument("--nvidia-driver", choices=["flatcar-sysext", "image-build"], help="expect the bootstrap of this driver source")
 args.add_argument("--sysext-url", metavar="URL", help="with flatcar-sysext, expect Ignition to download the extension image from this URL; without it, no download")
+args.add_argument("--proxy", action="store_true", help="expect the http-proxy drop-in of containerd, kubelet and teleport; without it, none")
 opts = args.parse_args()
 
 docs = [d for d in yaml.safe_load_all(__import__("sys").stdin) if d]
@@ -56,6 +60,16 @@ pool = kmp["metadata"]["name"]
 ec2 = kmp["spec"]["ec2NodeClass"]
 mappings = {m["deviceName"]: m for m in ec2["blockDeviceMappings"]}
 assert mappings["/dev/xvda"].get("rootVolume") and "/dev/xvde" in mappings, mappings.keys()
+
+# The Teleport join, as the cluster's own workers carry it and the only way the nodes join.
+paths = {f["path"] for f in kc["spec"]["files"]}
+(token,) = [f for f in kc["spec"]["files"] if f["path"] == "/etc/teleport-join-token"]
+cluster = token["contentFrom"]["secret"]["name"].removesuffix("-teleport-join-token")
+assert cluster and pool.startswith(f"{cluster}-") and token["contentFrom"]["secret"]["key"] == "joinToken", token
+assert {"/etc/teleport.yaml", "/opt/teleport-node-role.sh"} <= paths, paths
+assert units["teleport.service"]["enabled"] and "--config=/etc/teleport.yaml" in units["teleport.service"]["contents"], units.get("teleport.service")
+proxied = {path for path in paths if path.endswith("/http-proxy.conf")}
+assert proxied == ({f"/etc/systemd/system/{unit}.service.d/http-proxy.conf" for unit in ("containerd", "kubelet", "teleport")} if opts.proxy else set()), proxied
 if opts.lib_source:
     filesystems = {f["name"]: f["mount"] for f in ignition["storage"]["filesystems"]}
     assert "What=/dev/disk/by-label/lib" in units["var-lib.mount"]["contents"] and units["var-lib.mount"]["enabled"], units["var-lib.mount"]

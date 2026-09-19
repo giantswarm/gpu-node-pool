@@ -286,16 +286,6 @@
         },
         "subscriptionID": {
             "type": "string"
-        },
-        "teleport": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "enabled": {
-                    "type": "boolean",
-                    "description": "Join the nodes to Teleport with the cluster's `<cluster>-teleport-join-token` Secret; off where the cluster has none."
-                }
-            }
         }
     }
 }
