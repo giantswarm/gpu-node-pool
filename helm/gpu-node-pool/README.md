@@ -26,8 +26,9 @@ namespace, so the chart renders nothing cluster-scoped.
 
 The nodes carry the label `giantswarm.io/machine-pool=<cluster>-<pool>`; the accelerator is read
 from gpu-feature-discovery's `nvidia.com/gpu.product`. The only object referenced by name outside
-the release is the cluster's `<cluster>-teleport-join-token` Secret, behind `teleport.enabled`.
-Nothing references an object the cluster's release renames on upgrade.
+the release is the cluster's `<cluster>-teleport-join-token` Secret: the nodes join Teleport with
+it, as the cluster's own workers do, and no other way. Nothing references an object the cluster's
+release renames on upgrade.
 
 ## Values contract
 
@@ -42,7 +43,6 @@ Nothing references an object the cluster's release renames on upgrade.
 | `pool.nvidiaDriver` | the source of the node's NVIDIA driver — Flatcar's prebuilt, release-matched extension by default, or the build at boot — its branch and a mirror for the extension image ([the image contract](#the-image-contract-what-the-image-provides-what-the-pool-configures)) | the person; the defaults fit every image since Flatcar 4344.0.0 |
 | `pool.prewarm` | [launch the first node at install](#prewarming-the-first-node) with a preemptible placeholder Job under the platform's PriorityClass (`pool.prewarm.priorityClassName`); the installation's own pool only | the person, through cluster-manager |
 | `pool.kubernetesVersion`, `pool.machineImage` | the pool's own pins | cluster-manager, from the cluster's Release CR at creation |
-| `teleport.enabled` | join the nodes to Teleport | cluster-manager, from the presence of `<cluster>-teleport-join-token` |
 | `cluster.baseDomain`, `cluster.managementCluster`, `cluster.containerRegistry`, `cluster.registryMirrors`, `cluster.proxy`, `cluster.cilium.ipamMode`, `cluster.kubelet.maxPods` | the snapshot of the cluster's settings the bootstrap needs | cluster-manager, from the cluster's values and `AWSCluster` at creation; refreshed by a re-run |
 
 **Credentials never go into `spec.values`.** Where a cluster has registry credentials, the
@@ -220,8 +220,11 @@ served model; bumps are meant to be explicit.
 
 ## Guarding the bootstrap
 
-`make verify` renders the fixture cluster (`ci/ci-values.yaml`, which `ct lint` uses as well) for every accelerator with and without
-teleport, compares the goldens, validates every `KarpenterMachinePool` against the CRD served by
+`make verify` renders the fixture cluster (`ci/ci-values.yaml`, which `ct lint` uses as well) for every accelerator,
+compares the goldens, holds every render to the Teleport join (the join token from the cluster's
+Secret, `/etc/teleport.yaml`, the role script, `teleport.service`) and a proxied render to the
+`http-proxy.conf` drop-in of containerd, kubelet and teleport, validates every `KarpenterMachinePool`
+against the CRD served by
 the pinned aws-resolver-rules-operator (fields, types, patterns and enums — not its CEL rules),
 holds every object of a render to the release namespace (nothing cluster-scoped), renders the
 prewarm Job into its own golden — under the default class and under a named one — renders the
@@ -278,4 +281,3 @@ rewrites the goldens.
 | pool.nvidiaDriver.source | string | `"flatcar-sysext"` | Where the node's NVIDIA driver comes from. `flatcar-sysext`: the prebuilt, release-matched `flatcar-nvidia-drivers-<branch>` system extension Flatcar ships next to the image (Flatcar 4344.0.0 and newer; an older image is refused), fetched and verified by the OS at first boot, so the node registers like any other node. `image-build`: Flatcar's `nvidia.service` builds the driver for the running kernel at each node's first boot, minutes per node. |
 | pool.nvidiaDriver.branch | string | `"570"` | Driver branch of the extension (`535`, `550`, `570`), as Flatcar names it; the proprietary variant. |
 | pool.nvidiaDriver.baseURL | string | `""` | Directory holding the release's `flatcar-nvidia-drivers-<branch>.raw` for a network the Flatcar release server is not reachable from: Ignition downloads the image from there at first boot and the OS activates it without downloading. Empty: the OS fetches it from Flatcar's release server for its own version. |
-| teleport.enabled | bool | `true` | Join the nodes to Teleport with the cluster's `<cluster>-teleport-join-token` Secret; off where the cluster has none. |

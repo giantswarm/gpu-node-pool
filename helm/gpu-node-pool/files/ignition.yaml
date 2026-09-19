@@ -60,7 +60,6 @@ systemd:
         LimitMEMLOCK=infinity
   - name: auditd.service
     enabled: false
-{{- if .Values.teleport.enabled }}
   - name: teleport.service
     enabled: true
     contents: |
@@ -76,7 +75,6 @@ systemd:
       LimitNOFILE=524288
       [Install]
       WantedBy=multi-user.target
-{{- end }}
   - name: kubelet-aws-config.service
     enabled: true
 {{- if eq .Values.pool.volumes.libSource "instance-store" }}
