@@ -210,6 +210,6 @@ rewrites the goldens.
 | pool.volumes.log | string | `"30Gi"` | `/var/log` volume. |
 | pool.prewarm.enabled | bool | `false` | Launch the pool's first node at install: a one-shot Job holds one GPU at negative priority until the first workload preempts it. Only for the installation's own pool, where the release namespace is on the cluster the nodes join. |
 | pool.prewarm.holdMinutes | int | `15` | Minutes the placeholder holds the node when no workload comes; then it ends and Karpenter consolidates the empty node. |
-| pool.prewarm.image | string | `"gsoci.azurecr.io/giantswarm/alpine:3.22.1"` | Image of the placeholder; anything with `sleep`. |
+| pool.prewarm.image | string | `"gsoci.azurecr.io/giantswarm/alpine:3.24.1"` | Image of the placeholder; anything with `sleep`. |
 | pool.prewarm.priorityClassName | string | `"agent-platform-prewarm-placeholder"` | Name of the PriorityClass the placeholder runs under: a negative value with `preemptionPolicy: Never`, so the first workload preempts it. The chart renders no PriorityClass (a pool release is namespaced); the agent-platform release ships this one. |
 | teleport.enabled | bool | `true` | Join the nodes to Teleport with the cluster's `<cluster>-teleport-join-token` Secret; off where the cluster has none. |

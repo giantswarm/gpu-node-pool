@@ -49,7 +49,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: hold
-        image: gsoci.azurecr.io/giantswarm/alpine:3.22.1
+        image: gsoci.azurecr.io/giantswarm/alpine:3.24.1
         command: ["sleep", "15m"]
         resources:
           limits:
