@@ -2,9 +2,9 @@
 # make verify: a golden per accelerator, the render's shape (the Teleport join in
 # every render, the proxy drop-ins in a proxied one), the KarpenterMachinePool
 # against the CRD the installation serves, the prewarm Job, the zone pin, the lib
-# volume's sources, the driver's sources, the chart's refusals, and the bootstrap
-# diff against the pinned cluster-aws (hack/oracle). `hack/verify.sh update`
-# rewrites the goldens.
+# volume's sources, the driver's sources, the chart's refusals, the helm.sh/chart
+# label for long versions, and the bootstrap diff against the pinned cluster-aws
+# (hack/oracle). `hack/verify.sh update` rewrites the goldens.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -135,6 +135,35 @@ compare "$fixture/goldens/nvidia-driver-mirror.yaml" "$work/nvidia-driver-mirror
 refused "needs Flatcar 4344.0.0 or newer" --set pool.machineImage=flatcar-stable-4230.2.1-kube-1.33.1-tooling-1.27.0-gs
 refused "needs the Flatcar version of pool.machineImage" --set pool.machineImage=ubuntu-2404-kube-1.33.1-gs
 render "${build[@]}" --set pool.machineImage=ubuntu-2404-kube-1.33.1-gs > /dev/null
+
+# The helm.sh/chart label is a valid label value (at most 63 characters,
+# alphanumeric at both ends) for any chart version: the 63-character cut of
+# "<name>-<version>" for a long version (a branch build's
+# <version>-dev.<branch>.<date>.<time>.<sha>, or the <version>+<digest>
+# helm-controller installs) can land on ".", on "_" (from "+") or on a run like
+# "--.". Each version renders every object with the label it names. The version
+# is set by packaging, since `helm template --version` does not apply to a chart
+# directory.
+label_re='^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$'
+while read -r version want; do
+  helm package "$chart" --version "$version" -d "$work" > /dev/null
+  labels=$(helm template "$release" "$work/gpu-node-pool-$version.tgz" -n "$namespace" -f "$values" | sed -n 's/^ *helm\.sh\/chart: *//p' | tr -d '"' | sort -u)
+  while IFS= read -r label; do
+    if ! [[ ${#label} -le 63 && $label =~ $label_re ]]; then
+      echo "version $version renders helm.sh/chart '$label', not a valid label value" >&2
+      status=1
+    fi
+  done <<< "$labels"
+  if [ "$labels" != "$want" ]; then
+    echo "version $version renders helm.sh/chart '$labels', want '$want'" >&2
+    status=1
+  fi
+done <<'VERSIONS'
+0.1.0 gpu-node-pool-0.1.0
+0.1.1-dev.renovate-helm-unit.2026-09-22.14-54-24.h1a2b3c4 gpu-node-pool-0.1.1-dev.renovate-helm-unit.2026-09-22.14-54-24
+0.1.1-dev.renovate-helm-unit.2026-09-22.14-54-24+h1a2b3c4 gpu-node-pool-0.1.1-dev.renovate-helm-unit.2026-09-22.14-54-24
+0.1.1-dev.renovate-helm-unit.2026-09-22.14-54---.h1a2b3c4 gpu-node-pool-0.1.1-dev.renovate-helm-unit.2026-09-22.14-54
+VERSIONS
 
 helm template test-wc "$(oracle cluster-aws)" -n "$namespace" -f hack/oracle/values.yaml > "$work/oracle.yaml"
 render > "$work/ours.yaml"
