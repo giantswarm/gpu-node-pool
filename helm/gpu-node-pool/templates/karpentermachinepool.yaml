@@ -62,7 +62,7 @@ spec:
       Name: {{ $poolName }}
   nodePool:
     disruption:
-      consolidationPolicy: WhenEmptyOrUnderutilized
+      consolidationPolicy: {{ .Values.pool.consolidationPolicy }}
       consolidateAfter: {{ .Values.pool.consolidateAfter }}
     limits:
       {{- toYaml .Values.pool.maxSize | nindent 6 }}

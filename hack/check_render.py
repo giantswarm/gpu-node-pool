@@ -14,7 +14,9 @@ the http-proxy.conf drop-in of containerd, kubelet and teleport (none without it
 Karpenter's instanceStorePolicy, no lib filesystem entry and no lib block device mapping;
 ebs: the lib volume on /dev/xvdd with provisioned throughput and IOPS within gp3's ratio,
 no unit and no policy; either way var-lib.mount through the label), the NodePool template
-requiring exactly the zones of `--zones` (none without it), and the bootstrap of the driver
+requiring exactly the zones of `--zones` (none without it), the NodePool consolidating
+as `--consolidation-policy` names it (default WhenEmpty: a node serving a model is never
+replaced by a cheaper size), and the bootstrap of the driver
 source named by `--nvidia-driver`: with flatcar-sysext the enabled-sysext line, nvidia.service
 masked, the CDI unit ordered after the extension and -- with `--sysext-url` -- Ignition
 downloading the extension image from that URL into the path the OS activates it from;
@@ -29,6 +31,7 @@ args = argparse.ArgumentParser(description=__doc__)
 args.add_argument("--namespace", required=True, help="the release namespace every object must be in")
 args.add_argument("--prewarm", metavar="CLASS", help="expect the prewarm Job under this PriorityClass")
 args.add_argument("--zones", metavar="ZONE[,ZONE]", help="expect the NodePool template to require these zones; without it, no zone requirement")
+args.add_argument("--consolidation-policy", choices=["WhenEmpty", "WhenEmptyOrUnderutilized"], default="WhenEmpty", help="expect the NodePool to consolidate with this policy")
 args.add_argument("--lib-source", choices=["instance-store", "ebs"], help="expect the node's lib volume from this source")
 args.add_argument("--nvidia-driver", choices=["flatcar-sysext", "image-build"], help="expect the bootstrap of this driver source")
 args.add_argument("--sysext-url", metavar="URL", help="with flatcar-sysext, expect Ignition to download the extension image from this URL; without it, no download")
@@ -91,6 +94,8 @@ if opts.lib_source:
         assert "instanceStorePolicy" not in ec2, ec2["instanceStorePolicy"]
         assert filesystems["lib"] == {"device": "/dev/xvdd", "format": "xfs", "wipeFilesystem": True, "label": "lib"}, filesystems.get("lib")
         assert "format-instance-store.service" not in units and not any("format-instance-store" in path for path in files), (units.keys(), files.keys())
+disruption = kmp["spec"]["nodePool"]["disruption"]
+assert disruption == {"consolidationPolicy": opts.consolidation_policy, "consolidateAfter": "10m"}, f"the pool consolidates with {opts.consolidation_policy}: {disruption}"
 requirements = {r["key"]: r for r in kmp["spec"]["nodePool"]["template"]["spec"]["requirements"]}
 zone = requirements.get("topology.kubernetes.io/zone")
 if opts.zones:
