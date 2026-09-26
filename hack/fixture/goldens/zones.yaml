@@ -56,7 +56,7 @@ spec:
       Name: test-wc-gpu00
   nodePool:
     disruption:
-      consolidationPolicy: WhenEmptyOrUnderutilized
+      consolidationPolicy: WhenEmpty
       consolidateAfter: 10m
     limits:
       nvidia.com/gpu: "4"

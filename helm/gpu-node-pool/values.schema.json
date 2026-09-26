@@ -146,7 +146,15 @@
                 },
                 "consolidateAfter": {
                     "type": "string",
-                    "description": "Time an empty or underutilized node lives before Karpenter consolidates it."
+                    "description": "Time a node lives after it became consolidatable before Karpenter consolidates it."
+                },
+                "consolidationPolicy": {
+                    "type": "string",
+                    "description": "Which nodes Karpenter consolidates. `WhenEmpty`: only a node without workload pods, so a node serving a model is never replaced by a cheaper size while it serves; the pool still scales to zero. `WhenEmptyOrUnderutilized` also replaces a node that a smaller size would fit, evicting its workload: every predictor holds a whole GPU, so the pool's nodes are never idle.",
+                    "enum": [
+                        "WhenEmpty",
+                        "WhenEmptyOrUnderutilized"
+                    ]
                 },
                 "kubernetesVersion": {
                     "type": "string",

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # make verify: a golden per accelerator, the render's shape (the Teleport join in
 # every render, the proxy drop-ins in a proxied one), the KarpenterMachinePool
-# against the CRD the installation serves, the prewarm Job, the zone pin, the lib
-# volume's sources, the driver's sources, the chart's refusals, the helm.sh/chart
-# label for long versions, and the bootstrap diff against the pinned cluster-aws
-# (hack/oracle). `hack/verify.sh update` rewrites the goldens.
+# against the CRD the installation serves, the prewarm Job, the zone pin, the
+# consolidation policy, the lib volume's sources, the driver's sources, the
+# chart's refusals, the helm.sh/chart label for long versions, and the bootstrap
+# diff against the pinned cluster-aws (hack/oracle). `hack/verify.sh update` rewrites the goldens.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -105,6 +105,15 @@ python3 hack/check_render.py --namespace "$namespace" --zones eu-central-1b < "$
 python3 hack/check_crd.py "$crd" < "$work/render.yaml"
 printf '%s\n' "$(render "${zones[@]}" --show-only templates/karpentermachinepool.yaml)" > "$work/zones.yaml"
 compare "$fixture/goldens/zones.yaml" "$work/zones.yaml"
+
+# pool.consolidationPolicy: the goldens above hold the default, WhenEmpty -- a
+# node serving a model is never replaced by a cheaper size, an empty node goes
+# after consolidateAfter. WhenEmptyOrUnderutilized opts back into replacement; any
+# other policy is refused by the schema.
+render --set pool.consolidationPolicy=WhenEmptyOrUnderutilized > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --consolidation-policy WhenEmptyOrUnderutilized < "$work/render.yaml"
+python3 hack/check_crd.py "$crd" < "$work/render.yaml"
+refused "pool.consolidationPolicy" --set pool.consolidationPolicy=Never
 
 # pool.volumes.libSource: the goldens above hold the default, the node's instance
 # store as /var/lib (the unit formatting it, no lib filesystem entry, no lib block

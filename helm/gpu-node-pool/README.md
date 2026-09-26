@@ -21,7 +21,7 @@ namespace, so the chart renders nothing cluster-scoped.
   Karpenter worker with every file inline; the hash covers the whole spec, so a bootstrap change
   renames the object and rolls the nodes,
 - a **`KarpenterMachinePool`** `<cluster>-<pool>` with the GPU shape: the instance family of the
-  chosen accelerator, the `nvidia.com/gpu` `NoSchedule` taint, consolidation down to zero nodes
+  chosen accelerator, the `nvidia.com/gpu` `NoSchedule` taint, consolidation of empty nodes down to zero
   and, with `pool.zones`, a [zone requirement](#pinning-the-pool-to-zones).
 
 The nodes carry the label `giantswarm.io/machine-pool=<cluster>-<pool>`; the accelerator is read
@@ -39,6 +39,7 @@ release renames on upgrade.
 | `pool.accelerator`, `pool.sizes` | one of the curated list (`nvidia-l4` → `g6`, `nvidia-a10g` → `g5`, `nvidia-t4` → `g4dn`, `nvidia-l40s` → `g6e`) and the instance sizes Karpenter may pick | the person |
 | `pool.zones` | the availability zones the nodes launch in, [pinning the pool](#pinning-the-pool-to-zones) to a zonal volume it serves; empty for any zone of the cluster's node subnets | the person; cluster-manager, from the installation's kept model cache claim |
 | `pool.minSize`, `pool.maxSize` | `0` — Karpenter scales the pool to zero — and the Karpenter `limits` bounding it (`nvidia.com/gpu`, `cpu`, `memory`) | the person |
+| `pool.consolidationPolicy`, `pool.consolidateAfter` | `WhenEmpty`: Karpenter removes a node once no workload runs on it, never replacing a serving node with a cheaper size; `WhenEmptyOrUnderutilized` opts back into replacement, which evicts the model it serves | the defaults |
 | `pool.volumes.libSource`, `pool.volumes.root`, `pool.volumes.lib`, `pool.volumes.log`, `pool.volumes.libThroughput`, `pool.volumes.libIops` | [the node's disks](#the-nodes-disks): `/var/lib` on the node's instance store by default or on a provisioned gp3 volume, the root and log volumes | the person; the defaults fit a serving node |
 | `pool.nvidiaDriver` | the source of the node's NVIDIA driver — Flatcar's prebuilt, release-matched extension by default, or the build at boot — its branch and a mirror for the extension image ([the image contract](#the-image-contract-what-the-image-provides-what-the-pool-configures)) | the person; the defaults fit every image since Flatcar 4344.0.0 |
 | `pool.prewarm` | [launch the first node at install](#prewarming-the-first-node) with a preemptible placeholder Job under the platform's PriorityClass (`pool.prewarm.priorityClassName`); the installation's own pool only | the person, through cluster-manager |
@@ -267,7 +268,8 @@ rewrites the goldens.
 | pool.zones | list | `[]` | Availability zones the pool's nodes launch in (`eu-central-1b`), among the cluster's node subnets; empty for any of them. An installation with a kept model cache pins its pools to the cache's zone: the claim is one EBS volume, and a node in another zone strands the workload mounting it. |
 | pool.minSize | int | `0` | Minimum size; Karpenter scales the pool to zero when nothing is scheduled. |
 | pool.maxSize | object | `{"nvidia.com/gpu":"4"}` | Upper bound of the pool, as Karpenter limits (resources across all of its nodes). |
-| pool.consolidateAfter | string | `"10m"` | Time an empty or underutilized node lives before Karpenter consolidates it. |
+| pool.consolidationPolicy | string | `"WhenEmpty"` | Which nodes Karpenter consolidates. `WhenEmpty`: only a node without workload pods, so a node serving a model is never replaced by a cheaper size while it serves; the pool still scales to zero. `WhenEmptyOrUnderutilized` also replaces a node that a smaller size would fit, evicting its workload: every predictor holds a whole GPU, so the pool's nodes are never idle. |
+| pool.consolidateAfter | string | `"10m"` | Time a node lives after it became consolidatable before Karpenter consolidates it. |
 | pool.volumes.root | string | `"15Gi"` | Root volume. |
 | pool.volumes.libSource | string | `"instance-store"` | Where `/var/lib` lives: the container images, the kubelet's directories and the pods' ephemeral storage. `instance-store`: the node's own NVMe instance store, which every size of the curated families has (125 to 900 GB below `12xlarge`), formatted at first boot and gone with the node; no lib volume is provisioned and Karpenter counts the store as the node's ephemeral storage. `ebs`: a provisioned gp3 volume of `lib`, `libThroughput` and `libIops`. |
 | pool.volumes.lib | string | `"200Gi"` | Size of the `/var/lib` volume with `libSource: ebs`. |
