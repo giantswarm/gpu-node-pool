@@ -137,8 +137,14 @@ installs all the same: admission refuses the Job's pod (`no PriorityClass with n
 found`), no node launches, the Job ends at its deadline and removes itself, and the first node
 comes with the first workload as without prewarm.
 
-The placeholder never launches a second node. The Job has `restartPolicy: Never` and
-`backoffLimit: 0`, so a preempted pod is not replaced; its `activeDeadlineSeconds` — the hold
+The placeholder never launches a second node. The Job has `restartPolicy: Never` and a
+`podFailurePolicy` that fails the Job on a pod carrying the `DisruptionTarget` condition —
+preempted by the first workload, evicted, its node drained or deleted — so a disrupted pod is
+not replaced; a failed hold container fails it too. Any other failed pod is retried
+(`backoffLimit: 6`): a fresh node's kubelet rejects the pod in the minutes before the device
+plugin advertises `nvidia.com/gpu`, and the Job's doubling pod backoff (10 s to 320 s, about ten
+minutes in all) outlasts that window, so the replacement holds the same node once its GPU is
+there. Its `activeDeadlineSeconds` — the hold
 plus ten minutes for the node launch — ends a placeholder whose node never came; a finished Job
 removes itself (`ttlSecondsAfterFinished`) and an empty node goes with `pool.consolidateAfter`.
 The Job is rendered on install only (`.Release.IsInstall`): an upgrade never re-creates it, and

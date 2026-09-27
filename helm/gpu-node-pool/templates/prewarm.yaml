@@ -20,8 +20,19 @@ name would give the pod priority 0, which no workload preempts.
 {{- /*
 One shot, on install only: an upgrade never re-creates the Job, and the
 annotation keeps a Flux drift correction from bringing it back once its TTL
-has removed it. backoffLimit 0 with restartPolicy Never: a preempted pod is
-not replaced, so the placeholder never launches a second node.
+has removed it.
+
+A disrupted pod is never replaced, so the placeholder never launches a second
+node: the podFailurePolicy fails the Job on a pod carrying DisruptionTarget
+(preempted by the first workload, evicted, its node drained or deleted), and
+on a hold container that failed. Any other failed pod is retried: a fresh
+node's kubelet rejects the pod in the minutes before the device plugin
+advertises nvidia.com/gpu (a Failed pod, no container run, no disruption), and
+the replacement lands on the same node once the GPU is there. backoffLimit 6
+at the Job's pod backoff (10s doubling: 10, 20, 40, 80, 160, 320s) keeps the
+Job retrying for about ten minutes, several times the two minutes the GPU
+takes, and ends inside activeDeadlineSeconds. A podFailurePolicy needs
+restartPolicy Never.
 */}}
 {{- if .Release.IsInstall }}
 apiVersion: batch/v1
@@ -34,7 +45,17 @@ metadata:
   annotations:
     helm.toolkit.fluxcd.io/driftDetection: disabled
 spec:
-  backoffLimit: 0
+  backoffLimit: 6
+  podFailurePolicy:
+    rules:
+    - action: FailJob
+      onPodConditions:
+      - type: DisruptionTarget
+    - action: FailJob
+      onExitCodes:
+        containerName: hold
+        operator: NotIn
+        values: [0]
   {{- /* The hold plus ten minutes for the node launch: ends a placeholder whose node never came. */}}
   activeDeadlineSeconds: {{ add (mul $hold 60) 600 }}
   ttlSecondsAfterFinished: 600
