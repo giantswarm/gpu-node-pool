@@ -25,7 +25,8 @@ has removed it.
 A disrupted pod is never replaced, so the placeholder never launches a second
 node: the podFailurePolicy fails the Job on a pod carrying DisruptionTarget
 (preempted by the first workload, evicted, its node drained or deleted), and
-on a hold container that failed. Any other failed pod is retried: a fresh
+on a hold container that ran and failed. Any other failed pod is retried, a
+container that could not start (exit 128, StartError) among them: a fresh
 node's kubelet rejects the pod in the minutes before the device plugin
 advertises nvidia.com/gpu (a Failed pod, no container run, no disruption), and
 the replacement lands on the same node once the GPU is there. backoffLimit 6
@@ -55,7 +56,7 @@ spec:
       onExitCodes:
         containerName: hold
         operator: NotIn
-        values: [0]
+        values: [0, 128]
   {{- /* The hold plus ten minutes for the node launch: ends a placeholder whose node never came. */}}
   activeDeadlineSeconds: {{ add (mul $hold 60) 600 }}
   ttlSecondsAfterFinished: 600
@@ -88,11 +89,11 @@ spec:
         resources:
           limits:
             cpu: 10m
-            memory: 16Mi
+            memory: 128Mi
             nvidia.com/gpu: "1"
           requests:
             cpu: 10m
-            memory: 16Mi
+            memory: 128Mi
             nvidia.com/gpu: "1"
         securityContext:
           allowPrivilegeEscalation: false

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The prewarm placeholder starts on a GPU node (giantswarm/cluster-manager#85): its hold container's 16Mi memory limit was OOM-killed during the container's start on a GPU node (`runc create failed: container init was OOM-killed`), before `sleep` ran; it has 128Mi. A container that could not start (exit code 128, `StartError`) is retried like a pod the kubelet rejected; only a hold container that ran and failed ends the Job.
+
 ### Changed
 
 - A pool node that serves a model is no longer replaced by a cheaper size ([#32](https://github.com/giantswarm/gpu-node-pool/issues/32)): the Karpenter NodePool consolidates with `pool.consolidationPolicy: WhenEmpty`, the new default, so Karpenter removes a node only once no workload pod runs on it — after `pool.consolidateAfter`, the pool still scaling to zero. Under `WhenEmptyOrUnderutilized` Karpenter replaced a Ready model's `g6e.8xlarge` with a `g6e.4xlarge` 16 minutes after launch, evicting the predictor, which paid its image pull and load again: every predictor holds a whole GPU, so an underutilized pool node is never idle. `pool.consolidationPolicy: WhenEmptyOrUnderutilized` opts back in; drift and expiry replacements are unchanged. `make verify` asserts the rendered disruption block for both policies and refuses any other.
