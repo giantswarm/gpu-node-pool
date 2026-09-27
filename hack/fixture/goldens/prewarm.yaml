@@ -21,7 +21,17 @@ metadata:
   annotations:
     helm.toolkit.fluxcd.io/driftDetection: disabled
 spec:
-  backoffLimit: 0
+  backoffLimit: 6
+  podFailurePolicy:
+    rules:
+    - action: FailJob
+      onPodConditions:
+      - type: DisruptionTarget
+    - action: FailJob
+      onExitCodes:
+        containerName: hold
+        operator: NotIn
+        values: [0]
   activeDeadlineSeconds: 1500
   ttlSecondsAfterFinished: 600
   template:

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Assert the shape of a gpu-node-pool render on stdin: exactly a MachinePool, a
 KubeadmConfig and a KarpenterMachinePool -- with `--prewarm <class>` also the prewarm
-Job holding one GPU of the pool under the PriorityClass of that name -- every object
+Job holding one GPU of the pool under the PriorityClass of that name, failing on a disrupted
+pod and retrying one the kubelet rejected -- every object
 in the release namespace and nothing cluster-scoped (a pool release is delivered as
 the organisation's tenant account, whose rights end at the namespace), no Secret, no
 accelerator label, KubeadmConfig.discovery left to CABPK, containerd's locked-memory limit
@@ -127,7 +128,15 @@ if opts.prewarm:
     job = by_kind["Job"]
     spec, pod = job["spec"], job["spec"]["template"]["spec"]
     assert job["metadata"]["name"] == f"{pool}-prewarm", job["metadata"]
-    assert spec["backoffLimit"] == 0 and spec["ttlSecondsAfterFinished"] > 0 and spec["activeDeadlineSeconds"] > 0, spec
+    assert spec["ttlSecondsAfterFinished"] > 0 and spec["activeDeadlineSeconds"] > 0, spec
+    # A disrupted pod fails the Job, never replaced (no second node); a pod the kubelet
+    # rejected before the GPU was advertised is retried, within the deadline.
+    rules = spec["podFailurePolicy"]["rules"]
+    assert rules[0] == {"action": "FailJob", "onPodConditions": [{"type": "DisruptionTarget"}]}, rules
+    assert rules[1] == {"action": "FailJob", "onExitCodes": {"containerName": "hold", "operator": "NotIn", "values": [0]}}, rules
+    assert len(rules) == 2, rules
+    backoff = sum(10 * 2**n for n in range(spec["backoffLimit"]))
+    assert 300 <= backoff < spec["activeDeadlineSeconds"], f"backoffLimit {spec['backoffLimit']} retries for {backoff}s: outlast the GPU's advertisement, inside the deadline"
     assert pod["restartPolicy"] == "Never" and pod["terminationGracePeriodSeconds"] == 0, pod
     assert pod["priorityClassName"] == opts.prewarm, pod["priorityClassName"]
     assert pod["nodeSelector"] == {"giantswarm.io/machine-pool": pool}, pod["nodeSelector"]
