@@ -133,7 +133,11 @@ if opts.prewarm:
     # rejected before the GPU was advertised is retried, within the deadline.
     rules = spec["podFailurePolicy"]["rules"]
     assert rules[0] == {"action": "FailJob", "onPodConditions": [{"type": "DisruptionTarget"}]}, rules
-    assert rules[1] == {"action": "FailJob", "onExitCodes": {"containerName": "hold", "operator": "NotIn", "values": [0]}}, rules
+    assert rules[1] == {"action": "FailJob", "onExitCodes": {"containerName": "hold", "operator": "NotIn", "values": [0, 128]}}, rules
+    # The NVIDIA runtime's container start on a GPU node needs more than 16Mi: at 16Mi runc's
+    # container init was OOM-killed before the hold ran (giantswarm/cluster-manager#85).
+    hold = next(c for c in pod["containers"] if c["name"] == "hold")
+    assert hold["resources"]["limits"]["memory"] == "128Mi", hold["resources"]
     assert len(rules) == 2, rules
     backoff = sum(10 * 2**n for n in range(spec["backoffLimit"]))
     assert 300 <= backoff < spec["activeDeadlineSeconds"], f"backoffLimit {spec['backoffLimit']} retries for {backoff}s: outlast the GPU's advertisement, inside the deadline"

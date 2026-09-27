@@ -31,7 +31,7 @@ spec:
       onExitCodes:
         containerName: hold
         operator: NotIn
-        values: [0]
+        values: [0, 128]
   activeDeadlineSeconds: 1500
   ttlSecondsAfterFinished: 600
   template:
@@ -64,11 +64,11 @@ spec:
         resources:
           limits:
             cpu: 10m
-            memory: 16Mi
+            memory: 128Mi
             nvidia.com/gpu: "1"
           requests:
             cpu: 10m
-            memory: 16Mi
+            memory: 128Mi
             nvidia.com/gpu: "1"
         securityContext:
           allowPrivilegeEscalation: false
