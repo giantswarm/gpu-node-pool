@@ -90,8 +90,7 @@ preKubeadmCommands:
 - semodule -i /etc/selinux/flatcar-containerd-patch.cil
 - rm -f /etc/audit/rules.d/80-selinux.rules
 - systemctl restart audit-rules
-- rm -rf /etc/ssl/certs
-- cp -a /usr/share/ca-certificates /etc/ssl/certs
+- cp -a --remove-destination /usr/share/ca-certificates/. /etc/ssl/certs/
 - restorecon -RFv -e /usr /
 - mkdir -p /var/log/apiserver
 - chcon -R -t container_file_t /var/log/apiserver
