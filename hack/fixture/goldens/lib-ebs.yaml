@@ -115,7 +115,7 @@ spec:
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: KubeadmConfig
 metadata:
-  name: test-wc-gpu00-dee34
+  name: test-wc-gpu00-2e260
   namespace: org-giantswarm
   annotations:
     machine-pool.giantswarm.io/name: test-wc-gpu00
@@ -367,8 +367,7 @@ spec:
   - semodule -i /etc/selinux/flatcar-containerd-patch.cil
   - rm -f /etc/audit/rules.d/80-selinux.rules
   - systemctl restart audit-rules
-  - rm -rf /etc/ssl/certs
-  - cp -a /usr/share/ca-certificates /etc/ssl/certs
+  - cp -a --remove-destination /usr/share/ca-certificates/. /etc/ssl/certs/
   - restorecon -RFv -e /usr /
   - mkdir -p /var/log/apiserver
   - chcon -R -t container_file_t /var/log/apiserver
@@ -405,7 +404,7 @@ spec:
         configRef:
           apiGroup: bootstrap.cluster.x-k8s.io
           kind: KubeadmConfig
-          name: test-wc-gpu00-dee34
+          name: test-wc-gpu00-2e260
       clusterName: test-wc
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io
