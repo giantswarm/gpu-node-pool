@@ -12,5 +12,5 @@ dependencies:
     version: 10.4.0
     repository: https://giantswarm.github.io/cluster-catalog
   - name: aws-resolver-rules-operator
-    version: 0.28.0
+    version: 0.28.1
     repository: https://giantswarm.github.io/control-plane-catalog
