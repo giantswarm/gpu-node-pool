@@ -9,7 +9,7 @@ name: oracle
 version: 0.0.0
 dependencies:
   - name: cluster-aws
-    version: 10.3.2
+    version: 11.0.0
     repository: https://giantswarm.github.io/cluster-catalog
   - name: aws-resolver-rules-operator
     version: 0.28.1
