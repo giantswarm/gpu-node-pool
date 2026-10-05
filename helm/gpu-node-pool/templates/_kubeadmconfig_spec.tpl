@@ -91,7 +91,7 @@ preKubeadmCommands:
 - rm -f /etc/audit/rules.d/80-selinux.rules
 - systemctl restart audit-rules
 - cp -a --remove-destination /usr/share/ca-certificates/. /etc/ssl/certs/
-- restorecon -RFv -e /usr /
+- restorecon -RF -e /etc/.systemd-confext -e /usr /
 - mkdir -p /var/log/apiserver
 - chcon -R -t container_file_t /var/log/apiserver
 {{- end -}}

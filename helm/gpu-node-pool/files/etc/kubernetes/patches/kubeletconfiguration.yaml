@@ -5,6 +5,8 @@ shutdownGracePeriodCriticalPods: 60s
 kernelMemcgNotification: true
 evictionSoft:
   memory.available: "500Mi"
+# Without this, the kubelet sets every eviction signal that `evictionHard` does not list to 0, disabling eviction
+mergeDefaultEvictionSettings: true
 evictionHard:
   memory.available: "200Mi"
   imagefs.available: "15%"
