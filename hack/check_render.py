@@ -37,6 +37,7 @@ args.add_argument("--lib-source", choices=["instance-store", "ebs"], help="expec
 args.add_argument("--nvidia-driver", choices=["flatcar-sysext", "image-build"], help="expect the bootstrap of this driver source")
 args.add_argument("--sysext-url", metavar="URL", help="with flatcar-sysext, expect Ignition to download the extension image from this URL; without it, no download")
 args.add_argument("--proxy", action="store_true", help="expect the http-proxy drop-in of containerd, kubelet and teleport; without it, none")
+args.add_argument("--prefetch", metavar="IMAGE", action="append", default=[], help="expect the boot unit fetching this image's content into containerd's prefetch namespace (repeatable, in order); without it, no unit")
 opts = args.parse_args()
 
 docs = [d for d in yaml.safe_load_all(__import__("sys").stdin) if d]
@@ -73,7 +74,21 @@ assert cluster and pool.startswith(f"{cluster}-") and token["contentFrom"]["secr
 assert {"/etc/teleport.yaml", "/opt/teleport-node-role.sh"} <= paths, paths
 assert units["teleport.service"]["enabled"] and "--config=/etc/teleport.yaml" in units["teleport.service"]["contents"], units.get("teleport.service")
 proxied = {path for path in paths if path.endswith("/http-proxy.conf")}
-assert proxied == ({f"/etc/systemd/system/{unit}.service.d/http-proxy.conf" for unit in ("containerd", "kubelet", "teleport")} if opts.proxy else set()), proxied
+proxied_units = ("containerd", "kubelet", "teleport") + (("prefetch-images",) if opts.prefetch else ())
+assert proxied == ({f"/etc/systemd/system/{unit}.service.d/http-proxy.conf" for unit in proxied_units} if opts.proxy else set()), proxied
+# The prefetch: a unit after kubeadm.service (whose commands restart containerd), ordered
+# before nothing, fetching each image into the prefetch namespace, never k8s.io -- the CRI
+# would list it as present and the kubelet skip its pull.
+if opts.prefetch:
+    assert units["prefetch-images.service"] == {"name": "prefetch-images.service", "enabled": True}, units.get("prefetch-images.service")
+    unit = files["/etc/systemd/system/prefetch-images.service"]
+    assert "After=kubeadm.service containerd.service" in unit and "Before=" not in unit and "ExecStart=/opt/bin/prefetch-images.sh" in unit, unit
+    script = files["/opt/bin/prefetch-images.sh"]
+    fetched = re.findall(r'ctr --namespace prefetch content fetch --hosts-dir /etc/containerd/certs.d "([^"]+)"', script)
+    assert fetched == opts.prefetch, (fetched, opts.prefetch)
+    assert "k8s.io" not in script.split("set -u", 1)[1], "the prefetch never writes the kubelet's namespace"
+else:
+    assert "prefetch-images.service" not in units and not {"/opt/bin/prefetch-images.sh", "/etc/systemd/system/prefetch-images.service"} & paths, "no pool.prefetchImages renders no prefetch"
 if opts.lib_source:
     filesystems = {f["name"]: f["mount"] for f in ignition["storage"]["filesystems"]}
     assert "What=/dev/disk/by-label/lib" in units["var-lib.mount"]["contents"] and units["var-lib.mount"]["enabled"], units["var-lib.mount"]

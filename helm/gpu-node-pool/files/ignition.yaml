@@ -92,6 +92,10 @@ systemd:
 {{- end }}
   - name: nvidia-cdi-spec.service
     enabled: true
+{{- if .Values.pool.prefetchImages }}
+  - name: prefetch-images.service
+    enabled: true
+{{- end }}
   - name: var-lib.mount
     enabled: true
     contents: |

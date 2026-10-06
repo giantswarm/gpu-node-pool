@@ -103,6 +103,14 @@ pool:
     libIops: 4000
     # -- `/var/log` volume.
     log: 30Gi
+  # @schema item:string;uniqueItems:true
+  # -- Images whose content every node of the pool downloads while it joins: manifests, configs and
+  # compressed layers, into containerd's `prefetch` namespace, without unpacking. A pod's pull of the
+  # same reference later finds every blob present and only unpacks, so a multi-gigabyte serving
+  # runtime no longer downloads after the GPU is usable. Full references (`registry/repository:tag`
+  # or `@sha256:`), through the cluster's registry mirrors. cluster-manager sets the images of the
+  # serving slice's pre-pull; empty, the bootstrap fetches nothing.
+  prefetchImages: []
   prewarm:
     # -- Launch the pool's first node at install: a one-shot Job holds one GPU at negative
     # priority until the first workload preempts it. Only for the installation's own pool,

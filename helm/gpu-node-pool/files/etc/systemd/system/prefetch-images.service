@@ -1,0 +1,19 @@
+[Unit]
+Description=Fetch the content of the images the node's first workloads run
+Documentation=https://github.com/giantswarm/gpu-node-pool
+# The kubelet pulls an image only when a pod on the node needs it, and the GPU
+# workloads' images -- the serving runtime among them, gigabytes -- are pulled after
+# the GPU is usable. This unit downloads their content (manifests, configs,
+# compressed layers) while the node joins, so the kubelet's pull later finds every
+# blob present and only unpacks. It runs after kubeadm.service, whose commands
+# restart containerd. It is ordered before nothing and is a simple service, so
+# neither the node's join nor multi-user.target waits for the download.
+After=kubeadm.service containerd.service
+Requires=containerd.service
+
+[Service]
+Type=simple
+ExecStart=/opt/bin/prefetch-images.sh
+
+[Install]
+WantedBy=multi-user.target

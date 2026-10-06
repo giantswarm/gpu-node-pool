@@ -86,6 +86,18 @@ exactly what it says. (With the driver built at boot, whose binaries land under 
 per-container discovery mounted `nvidia-smi` off every container's PATH and the GPU operator's toolkit
 validation never passed — the reason the pool sets `mode = "cdi"` for both sources.)
 
+The bootstrap **fetches the images of `pool.prefetchImages` while the node joins**: `prefetch-images.service`,
+after `kubeadm.service` (whose commands restart containerd) and ahead of nothing, downloads each image's
+manifests, config and compressed layers with `ctr content fetch` through the cluster's registry hosts, without
+unpacking. The content goes into containerd's `prefetch` namespace, not the kubelet's `k8s.io`: the CRI lists
+every image of `k8s.io`, so a fetched image there would read as present, the kubelet would skip its pull and the
+unpack would run inside the container's creation, under the kubelet's runtime request timeout. containerd
+shares committed content across namespaces (its default `content_sharing_policy`), so when a pod on the node
+pulls the same reference, every blob is already there and the pull only unpacks. On a GPU node that matters for
+the serving runtime: several gigabytes the serving slice's pre-pull may only start once the GPU is usable
+(so its unpack stays off the GPU operator's start), now downloaded in the minute before. cluster-manager sets the
+list to the images of the slice's pre-pull; empty, the default, renders no unit.
+
 The bootstrap also lets a workload **lock its memory**: the drop-in `memlock.conf` on `containerd.service`,
 next to the cgroup drop-in the cluster charts carry, sets `LimitMEMLOCK=infinity`. A container inherits
 containerd's `RLIMIT_MEMLOCK` — the unit's default is 8 MB — and its default capability set has no
@@ -282,6 +294,7 @@ rewrites the goldens.
 | pool.volumes.libThroughput | int | `500` | Provisioned throughput of the `/var/lib` volume in MiB/s with `libSource: ebs`; image pulls on a fresh node are bounded by it. gp3 allows 125 to 1000 and at most 0.25 MiB/s per provisioned IOPS. |
 | pool.volumes.libIops | int | `4000` | Provisioned IOPS of the `/var/lib` volume with `libSource: ebs`. gp3 allows 3000 to 16000. |
 | pool.volumes.log | string | `"30Gi"` | `/var/log` volume. |
+| pool.prefetchImages | list | `[]` | Images whose content every node of the pool downloads while it joins: manifests, configs and compressed layers, into containerd's `prefetch` namespace, without unpacking. A pod's pull of the same reference later finds every blob present and only unpacks, so a multi-gigabyte serving runtime no longer downloads after the GPU is usable. Full references (`registry/repository:tag` or `@sha256:`), through the cluster's registry mirrors. cluster-manager sets the images of the serving slice's pre-pull; empty, the bootstrap fetches nothing. |
 | pool.prewarm.enabled | bool | `false` | Launch the pool's first node at install: a one-shot Job holds one GPU at negative priority until the first workload preempts it. Only for the installation's own pool, where the release namespace is on the cluster the nodes join. |
 | pool.prewarm.holdMinutes | int | `15` | Minutes the placeholder holds the node when no workload comes; then it ends and Karpenter consolidates the empty node. |
 | pool.prewarm.image | string | `"gsoci.azurecr.io/giantswarm/alpine:3.24.2"` | Image of the placeholder; anything with `sleep`. |
