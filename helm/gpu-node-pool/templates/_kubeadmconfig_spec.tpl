@@ -35,9 +35,18 @@ files:
 {{ include "gpu-node-pool.file" (dict "path" "/etc/flatcar/enabled-sysext.conf" "permissions" "0644" "content" (printf "%s\n" (include "gpu-node-pool.nvidiaSysext" .))) }}
 {{- end }}
 {{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/system/nvidia-cdi-spec.service" "src" (printf "/etc/systemd/system/nvidia-cdi-spec.service.%s" .Values.pool.nvidiaDriver.source) "permissions" "0644") }}
+{{- if .Values.pool.prefetchImages }}
+{{- range .Values.pool.prefetchImages }}
+{{- if not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$" .) }}
+{{- fail (printf "pool.prefetchImages names %q, which is not an image reference (registry/repository:tag or @sha256:…)" .) }}
+{{- end }}
+{{- end }}
+{{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/opt/bin/prefetch-images.sh" "permissions" "0755") }}
+{{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/systemd/system/prefetch-images.service" "permissions" "0644") }}
+{{- end }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/etc/systemd/network/99-unmanaged-devices.network" "src" (printf "/etc/systemd/network/99-unmanaged-devices.network.%s" .Values.cluster.cilium.ipamMode) "permissions" "0644") }}
 {{- if .Values.cluster.proxy.enabled }}
-{{- range $unit := list "containerd" "kubelet" "teleport" }}
+{{- range $unit := concat (list "containerd" "kubelet" "teleport") (ternary (list "prefetch-images") (list) (not (empty .Values.pool.prefetchImages))) }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" $ "path" (printf "/etc/systemd/system/%s.service.d/http-proxy.conf" $unit) "src" "/etc/systemd/http-proxy.conf" "permissions" "0644") }}
 {{- end }}
 {{- end }}

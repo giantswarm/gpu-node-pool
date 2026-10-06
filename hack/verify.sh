@@ -79,6 +79,20 @@ render "${proxy[@]}" > "$work/render.yaml"
 python3 hack/check_render.py --namespace "$namespace" --proxy < "$work/render.yaml"
 python3 hack/check_crd.py "$crd" < "$work/render.yaml"
 
+# pool.prefetchImages: a boot unit downloads each image's content into containerd's
+# prefetch namespace once the node joined; through the proxy, a drop-in of its own.
+# The goldens above hold that an empty list renders no unit; a reference that is not
+# one is refused before it reaches the script.
+prefetch=(--set 'pool.prefetchImages={gsoci.azurecr.io/giantswarm/storage-initializer:v0.21.0,gsoci.azurecr.io/giantswarm/llm-d-fast/llm-d-cuda:v0.8.0}')
+render "${prefetch[@]}" > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --prefetch gsoci.azurecr.io/giantswarm/storage-initializer:v0.21.0 --prefetch gsoci.azurecr.io/giantswarm/llm-d-fast/llm-d-cuda:v0.8.0 < "$work/render.yaml"
+python3 hack/check_crd.py "$crd" < "$work/render.yaml"
+printf '%s\n' "$(render "${prefetch[@]}" --show-only templates/kubeadmconfig.yaml)" > "$work/prefetch.yaml"
+compare "$fixture/goldens/prefetch.yaml" "$work/prefetch.yaml"
+render "${proxy[@]}" "${prefetch[@]}" > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --proxy --prefetch gsoci.azurecr.io/giantswarm/storage-initializer:v0.21.0 --prefetch gsoci.azurecr.io/giantswarm/llm-d-fast/llm-d-cuda:v0.8.0 < "$work/render.yaml"
+refused "which is not an image reference" --set 'pool.prefetchImages={gsoci.azurecr.io/x:1$(reboot)}'
+
 # The prewarm Job renders for the installation's own pool (the fixture's
 # management cluster is `test`, so it is opted in) and nowhere else, under the
 # platform's PriorityClass by default or the one named -- never a PriorityClass of

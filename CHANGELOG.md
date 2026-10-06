@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `pool.prefetchImages`: a pool node downloads the content of the named images while it joins (giantswarm/agent-platform#812). `prefetch-images.service`, after `kubeadm.service` and ahead of nothing, runs `ctr content fetch` per image into containerd's `prefetch` namespace through the cluster's registry hosts, without unpacking; a pod's later pull of the same reference finds every blob present (containerd shares committed content across namespaces) and only unpacks. The serving runtime, 6.6 GB the serving slice's pre-pull starts only once the GPU is usable, thereby downloads in the minute before. Empty, the default, renders nothing and leaves the bootstrap unchanged; a reference that is not an image reference is refused.
+
 ### Fixed
 
 - The prewarm placeholder starts on a GPU node (giantswarm/cluster-manager#85): its hold container's 16Mi memory limit was OOM-killed during the container's start on a GPU node (`runc create failed: container init was OOM-killed`), before `sleep` ran; it has 128Mi. A container that could not start (exit code 128, `StartError`) is retried like a pod the kubelet rejected; only a hold container that ran and failed ends the Job.
