@@ -146,7 +146,8 @@
                 },
                 "consolidateAfter": {
                     "type": "string",
-                    "description": "Time a node lives after it became consolidatable before Karpenter consolidates it."
+                    "description": "Time since the last pod event on a node (a pod bound, terminating or terminal) after which Karpenter may consolidate it, whatever runs on it. It outlasts a predictor's image pull: a pod deleted while its pull runs stays terminating until the pull ends, and a node consolidatable when that pod goes is disrupted as `Empty` before its Pending replacement binds, losing the node and the images on its disk. `Never` keeps every node.",
+                    "pattern": "^(([0-9]+(s|m|h))+|Never)$"
                 },
                 "consolidationPolicy": {
                     "type": "string",

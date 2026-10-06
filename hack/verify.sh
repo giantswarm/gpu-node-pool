@@ -129,6 +129,17 @@ python3 hack/check_render.py --namespace "$namespace" --consolidation-policy Whe
 python3 hack/check_crd.py "$crd" < "$work/render.yaml"
 refused "pool.consolidationPolicy" --set pool.consolidationPolicy=Never
 
+# pool.consolidateAfter: the goldens above hold the default, 30m -- longer than a
+# predictor's image pull, which a pod deleted mid-pull stays terminating for; Karpenter
+# counts the time from that last pod event. A Karpenter duration or Never is
+# rendered as given; anything else (`10min`) is refused by the schema.
+render --set pool.consolidateAfter=1h30m > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --consolidate-after 1h30m < "$work/render.yaml"
+python3 hack/check_crd.py "$crd" < "$work/render.yaml"
+render --set pool.consolidateAfter=Never > "$work/render.yaml"
+python3 hack/check_render.py --namespace "$namespace" --consolidate-after Never < "$work/render.yaml"
+refused "pool/consolidateAfter.*does not match pattern" --set pool.consolidateAfter=10min
+
 # pool.volumes.libSource: the goldens above hold the default, the node's instance
 # store as /var/lib (the unit formatting it, no lib filesystem entry, no lib block
 # device mapping, Karpenter's instanceStorePolicy). ebs renders the provisioned gp3

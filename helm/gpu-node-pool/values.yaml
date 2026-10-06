@@ -80,8 +80,13 @@ pool:
   # scales to zero. `WhenEmptyOrUnderutilized` also replaces a node that a smaller size would fit,
   # evicting its workload: every predictor holds a whole GPU, so the pool's nodes are never idle.
   consolidationPolicy: WhenEmpty
-  # -- Time a node lives after it became consolidatable before Karpenter consolidates it.
-  consolidateAfter: 10m
+  # @schema pattern:^(([0-9]+(s|m|h))+|Never)$
+  # -- Time since the last pod event on a node (a pod bound, terminating or terminal) after which
+  # Karpenter may consolidate it, whatever runs on it. It outlasts a predictor's image pull: a pod
+  # deleted while its pull runs stays terminating until the pull ends, and a node consolidatable
+  # when that pod goes is disrupted as `Empty` before its Pending replacement binds, losing the
+  # node and the images on its disk. `Never` keeps every node.
+  consolidateAfter: 30m
   volumes:
     # -- Root volume.
     root: 15Gi
