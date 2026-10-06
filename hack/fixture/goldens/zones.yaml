@@ -57,7 +57,7 @@ spec:
   nodePool:
     disruption:
       consolidationPolicy: WhenEmpty
-      consolidateAfter: 10m
+      consolidateAfter: 30m
     limits:
       nvidia.com/gpu: "4"
     template:
