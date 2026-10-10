@@ -18,9 +18,7 @@ Karpenter worker spec with its files inline, no chart-owned Secrets), and a `Kar
 (instance families from a curated accelerator list, the `nvidia.com/gpu` taint, scale to zero). The pool pins its own
 Kubernetes version and machine image — never newer than the control plane — so a cluster upgrade never touches it,
 and it is deleted with the cluster through Cluster API's owner references. Consumers are cluster-manager
-(`create_node_pool`, `delete_node_pool`) and the Dev Portal's *Add GPU node pool* dialog. Decided in
-[bumblebee-plans#46](https://github.com/giantswarm/bumblebee-plans/pull/46) (D3); tracked in
-[giantswarm/giantswarm#37713](https://github.com/giantswarm/giantswarm/issues/37713).
+(`create_node_pool`, `delete_node_pool`) and the Dev Portal's *Add GPU node pool* dialog. A separate, cluster-owned pool means creating and removing GPU capacity never touches the cluster's other pools.
 
 ## Status
 
