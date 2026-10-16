@@ -108,7 +108,7 @@ spec:
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: KubeadmConfig
 metadata:
-  name: test-wc-gpu00-f9566
+  name: test-wc-gpu00-85593
   namespace: org-giantswarm
   annotations:
     machine-pool.giantswarm.io/name: test-wc-gpu00
@@ -342,7 +342,7 @@ spec:
       - name: node-ip
         value: ${COREOS_EC2_IPV4_LOCAL}
       - name: node-labels
-        value: ip=${COREOS_EC2_IPV4_LOCAL},role=worker,giantswarm.io/machine-pool=test-wc-gpu00
+        value: ip=${COREOS_EC2_IPV4_LOCAL},role=worker,giantswarm.io/machine-pool=test-wc-gpu00,karpenter.sh/do-not-sync-taints=true
       - name: v
         value: "2"
       name: ${COREOS_EC2_HOSTNAME}
@@ -403,7 +403,7 @@ spec:
         configRef:
           apiGroup: bootstrap.cluster.x-k8s.io
           kind: KubeadmConfig
-          name: test-wc-gpu00-f9566
+          name: test-wc-gpu00-85593
       clusterName: test-wc
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io

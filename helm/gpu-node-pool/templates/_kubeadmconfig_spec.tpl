@@ -67,7 +67,7 @@ joinConfiguration:
     - name: node-ip
       value: ${COREOS_EC2_IPV4_LOCAL}
     - name: node-labels
-      value: ip=${COREOS_EC2_IPV4_LOCAL},role=worker,giantswarm.io/machine-pool={{ $poolName }}
+      value: ip=${COREOS_EC2_IPV4_LOCAL},role=worker,giantswarm.io/machine-pool={{ $poolName }},karpenter.sh/do-not-sync-taints=true
     - name: v
       value: "2"
     name: ${COREOS_EC2_HOSTNAME}
