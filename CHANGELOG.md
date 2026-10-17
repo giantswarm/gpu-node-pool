@@ -7,41 +7,119 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- `pool.prefetchImages`: a pool node downloads the content of the named images while it joins (giantswarm/agent-platform#812). `prefetch-images.service`, after `kubeadm.service` and ahead of nothing, runs `ctr content fetch` per image into containerd's `prefetch` namespace through the cluster's registry hosts, without unpacking; a pod's later pull of the same reference finds every blob present (containerd shares committed content across namespaces) and only unpacks. The serving runtime, 6.6 GB the serving slice's pre-pull starts only once the GPU is usable, thereby downloads in the minute before. Empty, the default, renders nothing and leaves the bootstrap unchanged; a reference that is not an image reference is refused.
-
-### Fixed
-
-- A pool node is no longer consolidated as `Empty` while its predictor's replacement waits for it ([#44](https://github.com/giantswarm/gpu-node-pool/issues/44)): `pool.consolidateAfter` defaults to `30m` instead of `10m`. Karpenter counts `consolidateAfter` from a node's last pod event (a pod bound, terminating or terminal), not from the moment it empties, so a node is `Consolidatable` while a predictor sits in `Init:0/1` pulling its image. A predictor deleted mid-pull stays terminating until the pull ends; when that took longer than `consolidateAfter`, the node was disrupted as `Empty` seconds after the old pod went, before the Pending replacement could bind, and the replacement NodeClaim met no capacity. A `karpenter.sh/do-not-disrupt` pod annotation cannot hold the node there (Karpenter ignores a terminating pod's annotation and the replacement is not on the node yet) and a disruption budget cannot tell a waiting pool from an idle one. The value now carries a schema pattern (a Karpenter duration or `Never`); `make verify` asserts the default, an override and `Never`, and refuses a malformed duration.
-- The prewarm placeholder starts on a GPU node (giantswarm/cluster-manager#85): its hold container's 16Mi memory limit was OOM-killed during the container's start on a GPU node (`runc create failed: container init was OOM-killed`), before `sleep` ran; it has 128Mi. A container that could not start (exit code 128, `StartError`) is retried like a pod the kubelet rejected; only a hold container that ran and failed ends the Job.
+## [0.8.3-rc.8] - 2026-10-16
 
 ### Changed
 
 - A pool node's kubelet registers with the `karpenter.sh/do-not-sync-taints=true` node label, as cluster-aws 11.1.0 renders for its Karpenter node pools: Karpenter leaves the node's taints as the kubelet registered them (the pool's `nvidia.com/gpu` taint among them) instead of syncing the NodeClaim's. The bootstrap diff against cluster-aws (`make verify`) pins cluster-aws 11.1.0. The bootstrap change rolls the pool's nodes on upgrade.
+
+## [0.8.1] - 2026-10-06
+
+### Fixed
+
+- A pool node is no longer consolidated as `Empty` while its predictor's replacement waits for it ([#44](https://github.com/giantswarm/gpu-node-pool/issues/44)): `pool.consolidateAfter` defaults to `30m` instead of `10m`. Karpenter counts `consolidateAfter` from a node's last pod event (a pod bound, terminating or terminal), not from the moment it empties, so a node is `Consolidatable` while a predictor sits in `Init:0/1` pulling its image. A predictor deleted mid-pull stays terminating until the pull ends; when that took longer than `consolidateAfter`, the node was disrupted as `Empty` seconds after the old pod went, before the Pending replacement could bind, and the replacement NodeClaim met no capacity. A `karpenter.sh/do-not-disrupt` pod annotation cannot hold the node there (Karpenter ignores a terminating pod's annotation and the replacement is not on the node yet) and a disruption budget cannot tell a waiting pool from an idle one. The value now carries a schema pattern (a Karpenter duration or `Never`); `make verify` asserts the default, an override and `Never`, and refuses a malformed duration.
+
+## [0.8.0] - 2026-10-06
+
+### Added
+
+- `pool.prefetchImages`: a pool node downloads the content of the named images while it joins (giantswarm/agent-platform#812). `prefetch-images.service`, after `kubeadm.service` and ahead of nothing, runs `ctr content fetch` per image into containerd's `prefetch` namespace through the cluster's registry hosts, without unpacking; a pod's later pull of the same reference finds every blob present (containerd shares committed content across namespaces) and only unpacks. The serving runtime, 6.6 GB the serving slice's pre-pull starts only once the GPU is usable, thereby downloads in the minute before. Empty, the default, renders nothing and leaves the bootstrap unchanged; a reference that is not an image reference is refused.
+
+## [0.7.9] - 2026-09-27
+
+### Fixed
+
+- The prewarm placeholder starts on a GPU node (giantswarm/cluster-manager#85): its hold container's 16Mi memory limit was OOM-killed during the container's start on a GPU node (`runc create failed: container init was OOM-killed`), before `sleep` ran; it has 128Mi. A container that could not start (exit code 128, `StartError`) is retried like a pod the kubelet rejected; only a hold container that ran and failed ends the Job.
+
+## [0.7.8] - 2026-09-27
+
+### Fixed
+
+- The prewarm Job retries a pod the kubelet rejected before the GPU was advertised (giantswarm/cluster-manager#85). A fresh pool node's kubelet rejects the placeholder's pod in the roughly two minutes before the device plugin advertises `nvidia.com/gpu`, and under `backoffLimit: 0` the Job spent its only attempt there and ended `BackoffLimitExceeded` before any model was loaded. The Job now has `backoffLimit: 6` — the Job's pod backoff doubling from 10 s to 320 s, about ten minutes of retries, inside `activeDeadlineSeconds` — and a `podFailurePolicy` that fails it on a pod carrying `DisruptionTarget` (preempted, evicted, its node drained or deleted) or a failed hold container, so a preempted placeholder is still never replaced and never launches a second node. `make verify` asserts both rules and that the backoff outlasts the GPU's advertisement inside the deadline.
+
+## [0.7.7] - 2026-09-26
+
+### Changed
+
 - A pool node that serves a model is no longer replaced by a cheaper size ([#32](https://github.com/giantswarm/gpu-node-pool/issues/32)): the Karpenter NodePool consolidates with `pool.consolidationPolicy: WhenEmpty`, the new default, so Karpenter removes a node only once no workload pod runs on it — after `pool.consolidateAfter`, the pool still scaling to zero. Under `WhenEmptyOrUnderutilized` Karpenter replaced a Ready model's `g6e.8xlarge` with a `g6e.4xlarge` 16 minutes after launch, evicting the predictor, which paid its image pull and load again: every predictor holds a whole GPU, so an underutilized pool node is never idle. `pool.consolidationPolicy: WhenEmptyOrUnderutilized` opts back in; drift and expiry replacements are unchanged. `make verify` asserts the rendered disruption block for both policies and refuses any other.
-- A pool node's `/var/lib` — the container image unpacks, the kubelet's directories, the pods' emptyDirs and the containers' writable layers — lives on the node's NVMe instance store (#21): `pool.volumes.libSource: instance-store`, the default, adds `format-instance-store.service` to the bootstrap — a oneshot ahead of `var-lib.mount`, required by `local-fs.target`, that finds the first block device of model `Amazon EC2 NVMe Instance Storage`, formats it as xfs labelled `lib` unless it carries that label already, and fails the boot naming the disks present where there is none — renders neither the `/dev/xvdd` block device mapping nor the Ignition `lib` filesystem, and sets `instanceStorePolicy: RAID0` on the `ec2NodeClass` so Karpenter counts the store as the node's ephemeral storage. Every size of the curated families has a store (125 to 900 GB below `12xlarge`), local to the host and included in the instance price, where the provisioned gp3 volume cost its size and performance per node; the `8xlarge` of g6 and g6e have two devices and use the first. `pool.volumes.libSource: ebs` renders the provisioned volume of `lib`, `libThroughput` and `libIops` as before. The bootstrap change rolls the pool's nodes on upgrade.
-- A pool node takes its NVIDIA driver from Flatcar's prebuilt, release-matched `flatcar-nvidia-drivers-<branch>` system extension (#19): `pool.nvidiaDriver.source: flatcar-sysext`, the default, names it in `/etc/flatcar/enabled-sysext.conf`, so the OS downloads and verifies the image for its own version at first boot and merges it before the system starts; `nvidia.service` is masked, and `nvidia-cdi-spec.service` — ordered after the extension instead of the build — loads the modules through the extension's modprobe helper, creates the device nodes and writes the CDI specification. The build at boot (`setup-nvidia`: developer container, driver archive, `systemd-nspawn`, about 2.5 minutes and 4.3 GiB per node, containerd and kubelet coming back only after it) made a GPU node register some 180 s after launch where a regular node takes 30–45 s. `pool.nvidiaDriver.branch` (default `570`) picks the driver branch; `pool.nvidiaDriver.baseURL` moves the download of the extension image to Ignition from a mirror for a network the release server is not reachable from. An image older than Flatcar 4344.0.0, the first release shipping the extension, or without a Flatcar version in its name is refused with `flatcar-sysext`; `pool.nvidiaDriver.source: image-build` renders the bootstrap as before, the driver built at first boot. The bootstrap change rolls the pool's nodes on upgrade.
+
+## [0.7.4] - 2026-09-23
+
+### Fixed
+
+- The `helm.sh/chart` label is valid for any chart version ([#27](https://github.com/giantswarm/gpu-node-pool/issues/27)). The label is `<name>-<version>` cut to 63 characters, and the cut of a long version (a branch build's `X.Y.Z-dev.<branch>.<date>.<time>.h<sha7>`, or the `<tag>+<digest>` helm-controller installs) could end in `.`, `_` or `--.`, which the API server refuses for every labelled object; the whole run of `-`, `.` and `_` at the ends of the cut is now trimmed, and `make verify` renders the label for such versions.
+
+## [0.7.2] - 2026-09-19
 
 ### Removed
 
 - `teleport.enabled` (#24): the pool's nodes join Teleport with the cluster's `<cluster>-teleport-join-token` Secret in every render — the join-token file from the Secret, `/etc/teleport.yaml`, `/opt/teleport-node-role.sh`, the `teleport.service` unit and, with `cluster.proxy.enabled`, its proxy drop-in — as the cluster's own workers do: cluster-aws renders the join for every cluster, and there is no second way to join. The switch was a second code path nothing needed, and it surfaced as a choice in the pool-creation tooling. A release still carrying the value is refused by the values schema. `make verify` renders one golden per accelerator (`hack/fixture/goldens/<accelerator>.yaml`), holds the join in every render and the `http-proxy.conf` drop-in of containerd, kubelet and teleport in a proxied render.
 
+## [0.7.1] - 2026-09-18
+
 ### Fixed
 
-- The prewarm Job retries a pod the kubelet rejected before the GPU was advertised (giantswarm/cluster-manager#85). A fresh pool node's kubelet rejects the placeholder's pod in the roughly two minutes before the device plugin advertises `nvidia.com/gpu`, and under `backoffLimit: 0` the Job spent its only attempt there and ended `BackoffLimitExceeded` before any model was loaded. The Job now has `backoffLimit: 6` — the Job's pod backoff doubling from 10 s to 320 s, about ten minutes of retries, inside `activeDeadlineSeconds` — and a `podFailurePolicy` that fails it on a pod carrying `DisruptionTarget` (preempted, evicted, its node drained or deleted) or a failed hold container, so a preempted placeholder is still never replaced and never launches a second node. `make verify` asserts both rules and that the backoff outlasts the GPU's advertisement inside the deadline.
-- The `helm.sh/chart` label is valid for any chart version ([#27](https://github.com/giantswarm/gpu-node-pool/issues/27)). The label is `<name>-<version>` cut to 63 characters, and the cut of a long version (a branch build's `X.Y.Z-dev.<branch>.<date>.<time>.h<sha7>`, or the `<tag>+<digest>` helm-controller installs) could end in `.`, `_` or `--.`, which the API server refuses for every labelled object; the whole run of `-`, `.` and `_` at the ends of the cut is now trimmed, and `make verify` renders the label for such versions.
 - A pool node runs containerd with an unlimited locked-memory limit (giantswarm/agent-platform#564): the drop-in `memlock.conf` on `containerd.service` in the bootstrap's Ignition config sets `LimitMEMLOCK=infinity` next to the cgroup drop-in the cluster charts carry. A container inherits containerd's `RLIMIT_MEMLOCK` — the unit's default is 8 MB — and its default capability set has no `CAP_IPC_LOCK`, root included, so a serving runtime that `mlock()`s its weights (a unified-memory stack locks every weight allocation) failed its first lock and died at engine start with an out-of-memory at a few MiB while the node had a hundred GiB free; granting the capability to the container is refused under the baseline and restricted Pod Security Standards. With the limit unlimited the lock is bounded by the container's memory limit, which the cgroup charges for the locked pages. `make verify` asserts the drop-in in every render and the bootstrap diff whitelists exactly it. The bootstrap change rolls the pool's nodes on upgrade.
-- `pool.prewarm` renders no PriorityClass (#15): a pool release is delivered as the organisation's tenant ServiceAccount, whose rights end at the release namespace, so the cluster-scoped class the chart rendered beside the placeholder Job failed the install (`InstallFailed`) and the pool never came up. The Job takes its class from `pool.prewarm.priorityClassName` (default `agent-platform-prewarm-placeholder`, shipped by the agent-platform release); an empty name is refused at render. `make verify` holds every object of a render to the release namespace.
-- A pool node on the Giant Swarm Flatcar image reaches `nvidia.com/gpu` allocatable (#8): the bootstrap's `nvidia-cdi-spec.service`, ordered after Flatcar's `nvidia.service`, sets the image's NVIDIA container runtime to `mode = "cdi"` and writes the CDI specification of the driver to `/var/run/cdi/nvidia.yaml` with `/usr/bin` ahead of `/opt/bin` on its PATH. In `auto` mode the runtime located `nvidia-smi` through containerd's PATH (`/opt/bin` first on this image) and mounted it at `/opt/bin/nvidia-smi` in every container, off the PATH, so the GPU operator's toolkit validation looped on `nvidia-smi: executable file not found` and no GPU was ever advertised.
-- The bootstrap diff against cluster-aws (`make verify`) whitelists single list elements (`files[path=…]`, `preKubeadmCommands[=…]`, `additionalConfig.systemd.units[name=…]`) and decodes the Ignition config, so an added unit no longer needs the whole `files` list or the whole Ignition config taken out of the comparison.
+
+## [0.7.0] - 2026-09-18
+
+### Changed
+
+- A pool node's `/var/lib` — the container image unpacks, the kubelet's directories, the pods' emptyDirs and the containers' writable layers — lives on the node's NVMe instance store (#21): `pool.volumes.libSource: instance-store`, the default, adds `format-instance-store.service` to the bootstrap — a oneshot ahead of `var-lib.mount`, required by `local-fs.target`, that finds the first block device of model `Amazon EC2 NVMe Instance Storage`, formats it as xfs labelled `lib` unless it carries that label already, and fails the boot naming the disks present where there is none — renders neither the `/dev/xvdd` block device mapping nor the Ignition `lib` filesystem, and sets `instanceStorePolicy: RAID0` on the `ec2NodeClass` so Karpenter counts the store as the node's ephemeral storage. Every size of the curated families has a store (125 to 900 GB below `12xlarge`), local to the host and included in the instance price, where the provisioned gp3 volume cost its size and performance per node; the `8xlarge` of g6 and g6e have two devices and use the first. `pool.volumes.libSource: ebs` renders the provisioned volume of `lib`, `libThroughput` and `libIops` as before. The bootstrap change rolls the pool's nodes on upgrade.
+
+## [0.6.0] - 2026-09-18
+
+### Added
+
+- The chart README states the image contract: what the Giant Swarm Flatcar image provides for GPUs (container toolkit, containerd's `nvidia` runtime with CDI on, the legacy driver build) and what the pool configures (the driver extension, the CDI specification).
+
+### Changed
+
+- A pool node takes its NVIDIA driver from Flatcar's prebuilt, release-matched `flatcar-nvidia-drivers-<branch>` system extension (#19): `pool.nvidiaDriver.source: flatcar-sysext`, the default, names it in `/etc/flatcar/enabled-sysext.conf`, so the OS downloads and verifies the image for its own version at first boot and merges it before the system starts; `nvidia.service` is masked, and `nvidia-cdi-spec.service` — ordered after the extension instead of the build — loads the modules through the extension's modprobe helper, creates the device nodes and writes the CDI specification. The build at boot (`setup-nvidia`: developer container, driver archive, `systemd-nspawn`, about 2.5 minutes and 4.3 GiB per node, containerd and kubelet coming back only after it) made a GPU node register some 180 s after launch where a regular node takes 30–45 s. `pool.nvidiaDriver.branch` (default `570`) picks the driver branch; `pool.nvidiaDriver.baseURL` moves the download of the extension image to Ignition from a mirror for a network the release server is not reachable from. An image older than Flatcar 4344.0.0, the first release shipping the extension, or without a Flatcar version in its name is refused with `flatcar-sysext`; `pool.nvidiaDriver.source: image-build` renders the bootstrap as before, the driver built at first boot. The bootstrap change rolls the pool's nodes on upgrade.
+
+## [0.5.0] - 2026-09-18
 
 ### Added
 
 - `pool.zones` (#17): a list of availability zones adds a `topology.kubernetes.io/zone In [...]` requirement to the Karpenter NodePool template, so every node of the pool — prewarm placeholder and workload alike — comes up in the named zones; the default, an empty list, constrains nothing. A kept model cache claim is one EBS volume in one zone: a placeholder node launched in another zone stranded the predictor mounting the cache, Pending under a one-GPU limit on a pool that read ready.
+
+## [0.4.1] - 2026-09-18
+
+### Added
+
 - `pool.prewarm` (#12): when enabled, the chart launches the pool's first node at install — a one-shot Job `<cluster>-<pool>-prewarm` holds one `nvidia.com/gpu` of the pool at negative priority (`preemptionPolicy: Never`) until the first workload preempts it; `restartPolicy: Never` and `backoffLimit: 0` keep a preempted placeholder from launching a second node, `activeDeadlineSeconds` ends one whose node never came, and the Job is rendered on install only. Refused where `cluster.name` is not the management cluster, since the Job runs where the release lives.
+
+### Fixed
+
+- `pool.prewarm` renders no PriorityClass (#15): a pool release is delivered as the organisation's tenant ServiceAccount, whose rights end at the release namespace, so the cluster-scoped class the chart rendered beside the placeholder Job failed the install (`InstallFailed`) and the pool never came up. The Job takes its class from `pool.prewarm.priorityClassName` (default `agent-platform-prewarm-placeholder`, shipped by the agent-platform release); an empty name is refused at render. `make verify` holds every object of a render to the release namespace.
+
+## [0.4.0] - 2026-09-18
+
+### Added
+
 - `pool.volumes.libThroughput` (MiB/s, default 500) and `pool.volumes.libIops` (default 4000) provision the lib volume's gp3 throughput and IOPS (#12); image pulls on a fresh node were bounded by the baseline 125 MiB/s. A pair beyond gp3's 0.25 MiB/s per IOPS is refused at render.
 - `make verify` validates every rendered `KarpenterMachinePool` against the CRD served by the pinned aws-resolver-rules-operator chart (`hack/oracle/Chart.yaml`, bumped by Renovate) and checks the prewarm pair and the chart's refusals.
-- The chart README states the image contract: what the Giant Swarm Flatcar image provides for GPUs (container toolkit, containerd's `nvidia` runtime with CDI on, the legacy driver build) and what the pool configures (the driver extension, the CDI specification).
 
-[Unreleased]: https://github.com/giantswarm/gpu-node-pool/tree/main
+## [0.3.1] - 2026-09-16
+
+### Fixed
+
+- A pool node on the Giant Swarm Flatcar image reaches `nvidia.com/gpu` allocatable (#8): the bootstrap's `nvidia-cdi-spec.service`, ordered after Flatcar's `nvidia.service`, sets the image's NVIDIA container runtime to `mode = "cdi"` and writes the CDI specification of the driver to `/var/run/cdi/nvidia.yaml` with `/usr/bin` ahead of `/opt/bin` on its PATH. In `auto` mode the runtime located `nvidia-smi` through containerd's PATH (`/opt/bin` first on this image) and mounted it at `/opt/bin/nvidia-smi` in every container, off the PATH, so the GPU operator's toolkit validation looped on `nvidia-smi: executable file not found` and no GPU was ever advertised.
+- The bootstrap diff against cluster-aws (`make verify`) whitelists single list elements (`files[path=…]`, `preKubeadmCommands[=…]`, `additionalConfig.systemd.units[name=…]`) and decodes the Ignition config, so an added unit no longer needs the whole `files` list or the whole Ignition config taken out of the comparison.
+
+[Unreleased]: https://github.com/giantswarm/gpu-node-pool/compare/v0.8.3-rc.8...HEAD
+[0.8.3-rc.8]: https://github.com/giantswarm/gpu-node-pool/compare/v0.8.1...v0.8.3-rc.8
+[0.8.1]: https://github.com/giantswarm/gpu-node-pool/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/giantswarm/gpu-node-pool/compare/v0.7.9...v0.8.0
+[0.7.9]: https://github.com/giantswarm/gpu-node-pool/compare/v0.7.8...v0.7.9
+[0.7.8]: https://github.com/giantswarm/gpu-node-pool/compare/v0.7.7...v0.7.8
+[0.7.7]: https://github.com/giantswarm/gpu-node-pool/compare/v0.7.4...v0.7.7
+[0.7.4]: https://github.com/giantswarm/gpu-node-pool/compare/v0.7.2...v0.7.4
+[0.7.2]: https://github.com/giantswarm/gpu-node-pool/compare/v0.7.1...v0.7.2
+[0.7.1]: https://github.com/giantswarm/gpu-node-pool/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/giantswarm/gpu-node-pool/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/giantswarm/gpu-node-pool/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/giantswarm/gpu-node-pool/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/giantswarm/gpu-node-pool/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/giantswarm/gpu-node-pool/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/giantswarm/gpu-node-pool/releases/tag/v0.3.1
