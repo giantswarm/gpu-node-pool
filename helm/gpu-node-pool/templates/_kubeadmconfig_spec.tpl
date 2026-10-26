@@ -6,7 +6,7 @@ Karpenter worker, files inline, the pool's identity and the GPU taint added.
 {{- define "gpu-node-pool.kubeadmConfigSpec" -}}
 {{- $poolName := include "gpu-node-pool.poolName" . -}}
 files:
-{{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/sysctl.d/hardening.conf" "permissions" "0644") }}
+{{ include "gpu-node-pool.staticFile" (dict "ctx" . "path" "/etc/sysctl.d/80-hardening.conf" "permissions" "0644") }}
 {{ include "gpu-node-pool.templatedFile" (dict "ctx" . "path" "/etc/containerd/config.toml" "permissions" "0644") }}
 {{- range $registry, $endpoints := .Values.cluster.registryMirrors }}
 {{ include "gpu-node-pool.file" (dict "path" (printf "/etc/containerd/certs.d/%s/hosts.toml" $registry) "permissions" "0644" "content" (tpl ($.Files.Get "files/etc/containerd/hosts.toml.tpl") (dict "registry" $registry "endpoints" $endpoints "Template" $.Template))) }}
